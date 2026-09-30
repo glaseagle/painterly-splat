@@ -8,6 +8,15 @@ The train opens in Brush mode. Switch between Train, Bike, and Table, compare
 Splats / Hybrid / Brush, and adjust stroke size. The default size is the former
 maximum, now at the middle of an expanded slider.
 
+**Contour flow** steers pigment along image contours and places smaller, denser
+marks around detail, with broader washes in quiet regions. It starts at 75%; set
+it to 0 to compare the original brush rendering. Splats mode bypasses guidance.
+
+**Curved strokes** grow the selected marks into longer textured ribbons that
+follow the same contour field, stopping at depth and color boundaries so paint
+never drags across object edges. It starts at 65% and requires Contour flow
+above 0; set it to 0 to keep individual marks.
+
 ## Run locally
 
 Clone this repository and serve it as a static website:
@@ -35,6 +44,18 @@ pencil, and ink. A GPU matcher chooses a family from each Gaussian's projected
 shape, width, opacity, and luminance. Camera movement changes the match; the
 marks stay stable at rest. Larger marks sit over a translucent Gaussian ground.
 
+A half-resolution reference pass captures luminance, approximate blended depth,
+and coverage. Two small GPU passes derive a depth-aware structure tensor and a
+contour direction/detail map. Selected marks follow confident contours; weak
+directions retain the Gaussian orientation. Stable IDs and soft selection reduce
+density popping. The guide is capped at 640 pixels on its longest side and only
+runs when a painted frame is requested. It adds one scan draw and two fullscreen
+passes; guidance at 0 and Splats mode skip all three. Selected marks can grow
+into longer curved ribbons that trace the contour field in screen space, anchored
+to stable Gaussian IDs and stopping at depth and color boundaries. Temporal
+history is not yet reprojected, so view-dependent brush-family changes can still
+occur in motion.
+
 GaussianSplats3D handles projection, blending, visibility, and worker-based depth
 sorting. The viewer retains the source capture orientation and full scan density.
 Touch gestures use Three.js OrbitControls; desktop movement uses FlyControls.
@@ -45,6 +66,8 @@ Touch gestures use Three.js OrbitControls; desktop movement uses FlyControls.
 | `painterly-viewer.js` | Scene loading, camera, input, render loop |
 | `painterly-brushes.js` | Procedural mark atlas and shader integration |
 | `painterly-brush-matching.js` | Brush descriptors and GPU matching code |
+| `painterly-guidance.js` | Luminance/depth reference, contour and detail analysis |
+| `painterly-ribbons.js` | Curved-stroke ribbon tracing and textured fragment coordinates |
 | `painterly-touch.js` | Touch-only OrbitControls integration |
 | `painterly-scans/` | Full scans, source attribution, camera metadata |
 
@@ -58,6 +81,11 @@ npm test
 
 Tests cover brush selection, camera-angle changes, touch orbit/pan/zoom,
 gesture transitions, and independence from desktop input.
+
+With the static server running, open `tests/guidance-browser.html` for GPU
+regressions (both half-float targets and the byte fallback). These exercise actual
+shaders on flat regions, vertical/horizontal/diagonal edges, depth boundaries,
+empty coverage, deterministic redraws, and resizing.
 
 ## Credits
 

@@ -397,6 +397,18 @@
         <output for="density">100</output>
       </div>
 
+      <div class="control">
+        <label for="guidance">Contour flow</label>
+        <input id="guidance" type="range" min="0" max="100" value="75" title="Follow contours and concentrate fine strokes around detail. Set to 0 for the original brush rendering." />
+        <output for="guidance">75</output>
+      </div>
+
+      <div class="control">
+        <label for="ribbons">Curved strokes</label>
+        <input id="ribbons" type="range" min="0" max="100" value="65" title="Grow longer textured strokes along contours, stopping at depth and color boundaries. Requires Contour flow." />
+        <output for="ribbons">65</output>
+      </div>
+
       <div id="brush-palette" hidden aria-label="Available drawing tools"></div>
 
       <div class="panel-foot">
@@ -414,6 +426,6 @@
 
   <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
   <script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/brush.js"></script>
-  <script type="module" src="painterly-viewer.js?v=mobile-1"></script>
+  <script type="module" src="painterly-viewer.js?v=ribbons-1"></script>
 </body>
 </html>

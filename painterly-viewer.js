@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=adaptive-1';
+import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=ribbons-1';
+import { createPainterlyGuidance } from './painterly-guidance.js?v=ribbons-1';
 import { FlyControls } from './vendor/three/FlyControls.js';
 import { createTouchControls } from './painterly-touch.js';
 import { Viewer, RenderMode, SceneRevealMode } from './vendor/gaussian-splats-3d/gaussian-splats-3d.module.js';
@@ -12,11 +13,14 @@ const count = document.querySelector('#scene-count');
 const source = document.querySelector('#scene-source');
 const note = document.querySelector('#view-note');
 const density = document.querySelector('#density');
+const guidance = document.querySelector('#guidance');
+const ribbons = document.querySelector('#ribbons');
 const sceneButtons = [...document.querySelectorAll('[data-scene]')];
 let manifest, viewer, camera, renderer, controls, touchControls, scene, mode = 'brush';
 let ready = false, lastTick = performance.now();
 let drag = null, loadingScene = false;
 let sortPending = false, lastSort = 0;
+let painterlyGuidance;
 const basis = new THREE.Matrix4();
 const yawRotation = new THREE.Quaternion();
 const pitchRotation = new THREE.Quaternion();
@@ -112,6 +116,7 @@ async function loadScene(id) {
   try {
     controls?.dispose(); controls = null;
     touchControls?.dispose(); touchControls = null;
+    painterlyGuidance?.dispose(); painterlyGuidance = null;
     if (viewer) await viewer.dispose();
     scene = manifest.scenes.find(s => s.id === id);
     if (!renderer) {
@@ -138,7 +143,13 @@ async function loadScene(id) {
         loading.textContent = Number.isFinite(percent) ? `Loading full scan · ${Math.round(percent)}%` : 'Preparing full scan…';
       }
     });
+    painterlyGuidance = createPainterlyGuidance(renderer, viewer.splatMesh);
     installBrushMaterial(viewer, brushTexture, mode, Number(density.value) / 100);
+    viewer.splatMesh.material.uniforms.guideMap.value = painterlyGuidance.texture;
+    viewer.splatMesh.material.uniforms.guideReference.value = painterlyGuidance.reference;
+    viewer.splatMesh.material.uniforms.guideColor.value = painterlyGuidance.color;
+    viewer.splatMesh.material.uniforms.ribbonStrength.value = Number(ribbons.value) / 100;
+    viewer.splatMesh.material.uniforms.guideStrength.value = Number(guidance.value) / 100;
     ready = true; controls.enabled = true;
     touchControls = createTouchControls(camera, wrap, changed);
     sceneButtons.forEach(b => {
@@ -165,6 +176,12 @@ async function loadScene(id) {
 
 let brushTexture, modeRequest = 0;
 
+function updateViewNote() {
+  note.textContent = mode === 'splat' ? 'Full scan · fly camera'
+    : Number(guidance.value) > 0 ? 'Contour-guided marks · still when you stop'
+    : 'Original brush marks · still when you stop';
+}
+
 async function setMode(next) {
   const request = ++modeRequest;
   if (next !== 'splat') {
@@ -181,11 +198,13 @@ async function setMode(next) {
     b.classList.toggle('is-active', active); b.setAttribute('aria-pressed', String(active));
   });
   density.disabled = mode === 'splat';
+  guidance.disabled = mode === 'splat';
+  ribbons.disabled = mode === 'splat' || Number(guidance.value) === 0;
   if (viewer?.splatMesh?.material?.uniforms.brushMix) {
     viewer.splatMesh.material.uniforms.brushMix.value = mode === 'brush' ? 1 : mode === 'hybrid' ? .65 : 0;
     viewer.splatMesh.material.uniforms.pigmentMap.value = brushTexture;
   }
-  note.textContent = mode === 'splat' ? 'Full scan · fly camera' : 'Brushes follow the view · still when you stop';
+  updateViewNote();
   changed();
 }
 
@@ -247,6 +266,18 @@ document.addEventListener('keydown', e => {
     setMenu(false); menuButton.focus();
   }
 });
+guidance.addEventListener('input', () => {
+  document.querySelector('output[for="guidance"]').value = guidance.value;
+  if (ready) viewer.splatMesh.material.uniforms.guideStrength.value = Number(guidance.value) / 100;
+  updateViewNote();
+  ribbons.disabled = mode === 'splat' || Number(guidance.value) === 0;
+  viewer?.forceRenderNextFrame();
+});
+ribbons.addEventListener('input', () => {
+  document.querySelector('output[for="ribbons"]').value = ribbons.value;
+  if (ready) viewer.splatMesh.material.uniforms.ribbonStrength.value = Number(ribbons.value) / 100;
+  viewer?.forceRenderNextFrame();
+});
 mobile.addEventListener('change', () => setMenu(false));
 setMenu(false);
 
@@ -266,6 +297,10 @@ function tick(now) {
     // Instant reveal has no animation; don't keep rendering an invisible fade.
     viewer.splatMesh.visibleRegionChanging = false;
     if (viewer.shouldRender()) {
+      if (mode !== 'splat' && Number(guidance.value) > 0) {
+        painterlyGuidance.render(camera, wrap.clientWidth, wrap.clientHeight);
+      }
+      viewer.splatMesh.material.uniforms.ribbonViewport.value.set(wrap.clientWidth, wrap.clientHeight);
       viewer.render();
       wrap.dataset.frames = String(renderer.info.render.frame);
       wrap.dataset.renderedSplats = String(viewer.splatMesh.geometry.instanceCount);
