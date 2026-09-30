@@ -1,0 +1,286 @@
+{
+  "version": 2,
+  "recordBytes": 32,
+  "generated": "2026-09-28",
+  "scenes": [
+    {
+      "id": "table",
+      "label": "Table",
+      "detail": "Mip-NeRF 360 \u00b7 Bonsai",
+      "asset": "painterly-scans/table.splat",
+      "sourceUrl": "https://huggingface.co/datasets/alexmkwizu/gaussian_training_datasets/blob/main/tested_outputs/bonsai.ply",
+      "datasetUrl": "https://jonbarron.info/mipnerf360/",
+      "sourceCount": 403020,
+      "sampleCount": 20000,
+      "sourceSha256": "4cda36b75402ffbf96f0d5f5a85f9be1ae66a80d64c581631ca4a0d48f700ab4",
+      "assetSha256": "f3945c058679efd71e2aace7f8fe193f4c4c343e819ce84b1dfd6cf7748f3c6d",
+      "normalization": {
+        "center": [
+          -0.48608601093292236,
+          0.5230123400688171,
+          0.6463984847068787
+        ],
+        "scale": 0.5209934837503222,
+        "low": [
+          -3.173259735107422,
+          -1.6809340715408325,
+          -1.6552234888076782
+        ],
+        "high": [
+          2.201087713241577,
+          2.726958751678467,
+          2.9480204582214355
+        ]
+      },
+      "camera": {
+        "yaw": 0,
+        "pitch": 0,
+        "zoom": 1.1
+      },
+      "basis": [
+        [
+          0.45692053375530706,
+          0.639268405842538,
+          -0.6185139700316442
+        ],
+        [
+          -0.23930622827978038,
+          0.7580520782954387,
+          0.6067038616149328
+        ],
+        [
+          0.8567124108703402,
+          -0.12920120697387524,
+          0.49935047128967736
+        ]
+      ],
+      "fullAsset": "painterly-scans/table-full.ksplat",
+      "fullCount": 403020,
+      "fullBytes": 9696816,
+      "fullSha256": "254e9f4cd13f595e285c9422e002d3fc5b61a7f52b5d8621c0ed68f1031cc422",
+      "captureCamera": {
+        "img_name": "DSCF5565.JPG",
+        "position": [
+          -0.8518957415749736,
+          0.4306502021268381,
+          -0.07838924604437399
+        ],
+        "rotation": [
+          [
+            0.45692053375530706,
+            -0.23930622827978038,
+            0.8567124108703404
+          ],
+          [
+            0.639268405842538,
+            0.7580520782954389,
+            -0.1292012069738752
+          ],
+          [
+            -0.6185139700316441,
+            0.6067038616149328,
+            0.49935047128967736
+          ]
+        ],
+        "width": 3118,
+        "height": 2078,
+        "fx": 3222.7010797592447,
+        "fy": 3222.7010797592447
+      },
+      "trainingNormalization": {
+        "center": [
+          0.06945810699701166,
+          0.06680319609909466,
+          0.05462355143949205
+        ],
+        "scale": 0.2247338855304227
+      }
+    },
+    {
+      "id": "bike",
+      "label": "Bike",
+      "detail": "Mip-NeRF 360 \u00b7 Bicycle",
+      "asset": "painterly-scans/bike.splat",
+      "sourceUrl": "https://huggingface.co/datasets/alexmkwizu/gaussian_training_datasets/blob/main/tested_outputs/bicycle.ply",
+      "datasetUrl": "https://jonbarron.info/mipnerf360/",
+      "sourceCount": 1003690,
+      "sampleCount": 20000,
+      "sourceSha256": "ed3936a1e6640f5376b7059fd2f0160cb1056b4a247eba9f0bb62aa2c5757b7f",
+      "assetSha256": "d910b55d7a706328a4ac66e6ca497a136f80acf5cf3b61a57925391eb5125562",
+      "normalization": {
+        "center": [
+          -1.2613425254821777,
+          -1.110759288072586,
+          -0.4558844566345215
+        ],
+        "scale": 0.2547630150273079,
+        "low": [
+          -5.497708797454834,
+          -3.1518173217773438,
+          -5.951187610626221
+        ],
+        "high": [
+          2.9750237464904785,
+          0.9302987456321716,
+          5.039418697357178
+        ]
+      },
+      "camera": {
+        "yaw": 0,
+        "pitch": 0,
+        "zoom": 1.08
+      },
+      "basis": [
+        [
+          0.6356840663395591,
+          0.1589352827320079,
+          -0.7554107119341767
+        ],
+        [
+          -0.03804422066319289,
+          0.9838365806164537,
+          0.17498062725643193
+        ],
+        [
+          0.7710112872559864,
+          -0.08249338484885187,
+          0.6314558071472982
+        ]
+      ],
+      "fullAsset": "painterly-scans/bike-full.ksplat",
+      "fullCount": 1003690,
+      "fullBytes": 24141984,
+      "fullSha256": "e53ff550af9ed9465d3422a1d92c30f01167483ffe96ed6449465f9950d4acfb",
+      "captureCamera": {
+        "img_name": "_DSC8679.JPG",
+        "position": [
+          -0.6814818439105973,
+          0.31020606081679614,
+          -0.5084711807515859
+        ],
+        "rotation": [
+          [
+            0.6356840663395591,
+            -0.03804422066319289,
+            0.7710112872559866
+          ],
+          [
+            0.15893528273200797,
+            0.9838365806164537,
+            -0.08249338484885187
+          ],
+          [
+            -0.7554107119341767,
+            0.17498062725643193,
+            0.6314558071472982
+          ]
+        ],
+        "width": 4946,
+        "height": 3286,
+        "fx": 4649.505977743847,
+        "fy": 4627.300372546341
+      },
+      "trainingNormalization": {
+        "center": [
+          0.05032176924114682,
+          0.01106546772436609,
+          0.049524146147338424
+        ],
+        "scale": 0.22321685184167248
+      }
+    },
+    {
+      "id": "train",
+      "label": "Train",
+      "detail": "Tanks & Temples \u00b7 Train",
+      "asset": "painterly-scans/train.splat",
+      "sourceUrl": "https://huggingface.co/datasets/alexmkwizu/gaussian_training_datasets/blob/main/tested_outputs/train.ply",
+      "datasetUrl": "https://www.tanksandtemples.org/",
+      "sourceCount": 316845,
+      "sampleCount": 20000,
+      "sourceSha256": "ca5b673c63c73c6b9ddb5d84128a79e100fee7768cf36bacefbb31835280d87a",
+      "assetSha256": "b302e5b90c83e00c573b4825b8d6a7a1ed4abf32d1c3e378f43731da4dd92b2f",
+      "normalization": {
+        "center": [
+          0.22549033164978027,
+          -2.3656664192676544,
+          -3.913648247718811
+        ],
+        "scale": 0.2467271494291718,
+        "low": [
+          -2.109611988067627,
+          -4.890194892883301,
+          -9.587932586669922
+        ],
+        "high": [
+          2.5605926513671875,
+          0.15886205434799194,
+          1.7606360912322998
+        ]
+      },
+      "camera": {
+        "yaw": 0,
+        "pitch": 0,
+        "zoom": 1.04
+      },
+      "basis": [
+        [
+          -0.5229697750194029,
+          -0.05136589068142182,
+          -0.8508020684569706
+        ],
+        [
+          0.2258460402737909,
+          0.9541538056804408,
+          -0.19642831058220886
+        ],
+        [
+          0.8218857466271117,
+          -0.29487634761037673,
+          -0.48739281807507173
+        ]
+      ],
+      "fullAsset": "painterly-scans/train-full.ksplat",
+      "fullCount": 316845,
+      "fullBytes": 7627096,
+      "fullSha256": "c871de153c6a8bc290e82152731645ac4601a98914042f47dd17558c1cb9f388",
+      "captureCamera": {
+        "img_name": "00001.jpg",
+        "position": [
+          -0.4747436921778079,
+          -0.018293300817346075,
+          -0.610873653725798
+        ],
+        "rotation": [
+          [
+            0.8761342012188562,
+            0.06925962026449778,
+            0.47706599800804755
+          ],
+          [
+            -0.04747421839895103,
+            0.9972110940209488,
+            -0.05758673934988211
+          ],
+          [
+            -0.4797239414934443,
+            0.02780537650095985,
+            0.8769787916452908
+          ]
+        ],
+        "width": 1959,
+        "height": 1090,
+        "fx": 1159.5880733038061,
+        "fy": 1164.6601287484507
+      },
+      "trainingNormalization": {
+        "center": [
+          -0.0968704397484564,
+          0.0013477939434914535,
+          -0.005612218604137513
+        ],
+        "scale": 0.16302345725237957
+      }
+    }
+  ]
+}

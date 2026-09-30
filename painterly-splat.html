@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b0a" />
+  <meta name="description" content="Public Gaussian-splat benchmarks translated into view-selected p5.brush strokes with first-person controls." />
+  <title>Painterly Splat — Michael Culleton</title>
+  <link rel="icon" type="image/jpeg" href="logo.jpg" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f1eee7;
+      --muted: #9e9b94;
+      --line: rgba(241, 238, 231, .18);
+      --panel: rgba(14, 14, 13, .78);
+      --accent: #f06b3e;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #0b0b0a;
+      color: var(--ink);
+      font-family: Inter, system-ui, sans-serif;
+    }
+
+    button, input { font: inherit; }
+
+    .stage {
+      position: fixed;
+      inset: 0;
+      isolation: isolate;
+      background:
+        radial-gradient(circle at 50% 42%, rgba(67, 62, 51, .22), transparent 34%),
+        #0b0b0a;
+    }
+
+    #canvas-wrap,
+    #canvas-wrap canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+      cursor: grab;
+    }
+
+    #canvas-wrap { z-index: 0; }
+    #canvas-wrap canvas { z-index: 0 !important; }
+    #reset-view { color: var(--ink); background: transparent; border: 1px solid var(--line); padding: 7px 9px; white-space: nowrap; cursor: pointer; }
+    .axis a { color: inherit; pointer-events: auto; }
+    #canvas-wrap:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
+    #brush-palette { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; color: var(--muted); font-size: .6rem; }
+    #brush-palette[hidden] { display: none; }
+    #brush-palette span { display: grid; gap: 2px; text-align: center; }
+    #brush-palette canvas { width: 100%; height: 22px; }
+    #brush-work { position: fixed; left: -10000px; top: 0; pointer-events: none; }
+    .loading-message { position: absolute; z-index: 4; left: 50%; top: 43%; transform: translate(-50%, -50%); color: var(--ink); background: var(--panel); padding: 14px 20px; border: 1px solid var(--line); font-size: .8rem; pointer-events: none; }
+    .loading-message[hidden] { display: none; }
+
+    #canvas-wrap.is-dragging canvas { cursor: grabbing; }
+
+    .grain {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      opacity: .13;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
+      mix-blend-mode: soft-light;
+    }
+
+    .topbar {
+      position: absolute;
+      z-index: 4;
+      top: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      padding: max(22px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) 20px max(24px, env(safe-area-inset-left));
+      pointer-events: none;
+      background: linear-gradient(rgba(0,0,0,.65), transparent);
+      text-shadow: 0 1px 4px #000;
+    }
+
+    .identity,
+    .back {
+      pointer-events: auto;
+    }
+
+    .identity h1 {
+      margin: 0;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: clamp(1.2rem, 2.6vw, 2.2rem);
+      font-weight: 500;
+      letter-spacing: -.045em;
+    }
+
+    .identity p {
+      max-width: 430px;
+      margin: 7px 0 0;
+      color: #ddd;
+      font-size: .82rem;
+      line-height: 1.45;
+    }
+
+    .back {
+      color: var(--ink);
+      text-decoration: none;
+      font-size: .78rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .back:hover,
+    .back:focus-visible { border-color: var(--ink); }
+
+    .control-panel {
+      position: absolute;
+      z-index: 5;
+      right: max(22px, env(safe-area-inset-right));
+      bottom: max(22px, env(safe-area-inset-bottom));
+      width: min(310px, calc(100vw - 44px));
+      padding: 15px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      -webkit-backdrop-filter: blur(18px);
+      backdrop-filter: blur(18px);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 13px;
+    }
+
+    .panel-head span:first-child {
+      font-family: "Space Grotesk", sans-serif;
+      font-size: .78rem;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .live {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .live::before {
+      content: "";
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 10px rgba(240, 107, 62, .8);
+    }
+
+    .scene-row,
+    .mode-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border: 1px solid var(--line);
+    }
+
+    .scene-row { margin-bottom: 8px; }
+    .mode-row { margin-bottom: 14px; }
+
+    .scene-row button,
+    .mode-row button {
+      min-height: 34px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      color: var(--muted);
+      background: transparent;
+      font-size: .68rem;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .scene-row button:last-child,
+    .mode-row button:last-child { border-right: 0; }
+    .scene-row button.is-active,
+    .mode-row button.is-active { color: #111; background: var(--ink); }
+    .scene-row button:disabled { cursor: wait; opacity: .5; }
+
+    .scene-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      min-height: 20px;
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: .64rem;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .scene-meta a {
+      min-width: 0;
+      overflow: hidden;
+      color: inherit;
+      text-decoration: none;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .scene-meta a:hover,
+    .scene-meta a:focus-visible { color: var(--ink); }
+
+    .control {
+      display: grid;
+      grid-template-columns: 92px 1fr 35px;
+      align-items: center;
+      gap: 10px;
+      min-height: 32px;
+    }
+
+    .control label,
+    .control output {
+      color: var(--muted);
+      font-size: .7rem;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .control output { text-align: right; font-variant-numeric: tabular-nums; }
+
+    input[type="range"] {
+      width: 100%;
+      height: 14px;
+      margin: 0;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: var(--line); }
+    input[type="range"]::-webkit-slider-thumb {
+      width: 10px;
+      height: 10px;
+      margin-top: -4px;
+      appearance: none;
+      border: 0;
+      border-radius: 50%;
+      background: var(--ink);
+    }
+
+    input[type="range"]::-moz-range-track { height: 1px; background: var(--line); }
+    input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border: 0; border-radius: 50%; background: var(--ink); }
+
+    .panel-foot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-top: 12px;
+      padding-top: 11px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .69rem;
+      line-height: 1.35;
+    }
+
+    .axis {
+      position: absolute;
+      z-index: 3;
+      left: max(24px, env(safe-area-inset-left));
+      bottom: max(25px, env(safe-area-inset-bottom));
+      color: rgba(241, 238, 231, .42);
+      font-size: .68rem;
+      line-height: 1.5;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    .axis b { color: rgba(241, 238, 231, .82); font-weight: 500; }
+
+    .error {
+      position: absolute;
+      z-index: 8;
+      inset: 50% auto auto 50%;
+      width: min(420px, calc(100vw - 48px));
+      transform: translate(-50%, -50%);
+      display: none;
+      padding: 18px;
+      border: 1px solid var(--line);
+      background: #121211;
+      color: var(--muted);
+      font-size: .88rem;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    .menu-toggle, .mobile-hint, .menu-back { display: none; }
+    .menu-scrim { position: absolute; inset: 0; z-index: 4; background: rgba(0,0,0,.22); border: 0; }
+    .menu-scrim[hidden] { display: none; }
+    @media (max-width: 700px), (pointer: coarse) and (max-height: 600px) {
+      .topbar { align-items: center; gap: 12px; padding: max(12px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 18px max(16px, env(safe-area-inset-left)); z-index: 6; }
+      .identity h1 { font-size: 1.25rem; }
+      .identity p, .topbar > .back { display: none; }
+      .menu-toggle { display: grid; place-content: center; gap: 5px; width: 46px; height: 46px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 50%; background: rgba(14,14,13,.8); color: var(--ink); pointer-events: auto; cursor: pointer; }
+      .menu-toggle span { display: block; width: 18px; height: 1px; background: currentColor; }
+      .menu-toggle[aria-expanded="true"] span:first-child { transform: translateY(3px) rotate(45deg); }
+      .menu-toggle[aria-expanded="true"] span:last-child { transform: translateY(-3px) rotate(-45deg); }
+      .control-panel {
+        display: none;
+        right: max(14px, env(safe-area-inset-right));
+        top: calc(max(12px, env(safe-area-inset-top)) + 56px);
+        bottom: auto;
+        width: min(350px, calc(100vw - 28px));
+        max-height: calc(100dvh - max(12px, env(safe-area-inset-top)) - max(14px, env(safe-area-inset-bottom)) - 68px);
+        overflow-y: auto; overscroll-behavior: contain;
+        padding: 16px; border-radius: 16px; background: rgba(14,14,13,.94);
+      }
+      .control-panel.is-open { display: block; }
+      .scene-row button, .mode-row button, #reset-view { min-height: 44px; }
+      input[type="range"] { height: 44px; }
+      input[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -10px; }
+      input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; }
+      .menu-back { display: block; margin-top: 14px; padding: 14px 0 4px; color: var(--ink); text-decoration: none; border-top: 1px solid var(--line); font-size: .75rem; }
+      .mobile-hint { display: block; position: absolute; z-index: 3; bottom: max(16px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); padding: 8px 12px; border-radius: 20px; background: rgba(14,14,13,.65); color: #e6e3dc; font-size: .65rem; pointer-events: none; }
+      .axis { display: none; }
+      .control { grid-template-columns: 86px 1fr 32px; }
+      .panel-foot span { max-width: 190px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .live::before { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <div id="canvas-wrap" tabindex="0" aria-label="Scan viewer. Touch: one finger orbits, two fingers pan, pinch to zoom. Mouse: drag to look, WASD to move, R and F to rise or descend."></div>
+
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <div class="identity">
+        <h1>Painterly Splat</h1>
+        <p>Step inside the scan. Drag to look, WASD to move. Compare full Gaussian splats with marks chosen for your viewpoint.</p>
+      </div>
+      <a class="back" href="https://michael.software/experiments">Experiments</a>
+      <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Open options" aria-controls="render-controls" aria-expanded="false"><span></span><span></span></button>
+    </header>
+
+    <button class="menu-scrim" id="menu-scrim" type="button" aria-label="Close options" hidden tabindex="-1"></button>
+    <aside class="control-panel" id="render-controls" aria-label="Rendering controls">
+      <div class="panel-head">
+        <span>Public scan study</span>
+        <span class="live" id="render-status">Loading</span>
+      </div>
+
+      <div class="scene-row" role="group" aria-label="Scan dataset">
+        <button type="button" data-scene="table" disabled>Table</button>
+        <button type="button" data-scene="bike" disabled>Bike</button>
+        <button type="button" data-scene="train" class="is-active" disabled>Train</button>
+      </div>
+      <div class="scene-meta">
+        <a id="scene-source" href="https://jonbarron.info/mipnerf360/" target="_blank" rel="noopener">Loading public scan…</a>
+        <span id="scene-count">—</span>
+      </div>
+
+      <div class="mode-row" role="group" aria-label="Render mode">
+        <button type="button" data-mode="splat" aria-pressed="false">Splats</button>
+        <button type="button" data-mode="hybrid" aria-pressed="false">Hybrid</button>
+        <button type="button" data-mode="brush" class="is-active" aria-pressed="true">Brush</button>
+      </div>
+
+      <div class="control">
+        <label for="density">Stroke size</label>
+        <input id="density" type="range" min="0" max="200" value="100" />
+        <output for="density">100</output>
+      </div>
+
+      <div id="brush-palette" hidden aria-label="Available drawing tools"></div>
+
+      <div class="panel-foot">
+        <span id="view-note">Full scan · original capture view</span>
+        <button type="button" id="reset-view">Reset view</button>
+      </div>
+      <a class="menu-back" href="https://michael.software/experiments">← All experiments</a>
+    </aside>
+
+    <div class="mobile-hint">1 finger orbit · 2 fingers pan · Pinch zoom</div>
+    <div class="axis" aria-hidden="true"><b>Drag</b> look · <b>WASD</b> move<br><b>R / F</b> rise / descend · <b>Wheel</b> move<br><a href="https://github.com/mkkellogg/GaussianSplats3D" target="_blank" rel="noopener">GaussianSplats3D</a> + <a href="https://github.com/mrdoob/three.js" target="_blank" rel="noopener">Three.js</a></div>
+    <div class="loading-message" id="loading-message" role="status">Loading full scan…</div>
+    <div class="error" id="error" role="alert">This study needs WebGL2. Try opening it in a current version of Chrome, Safari, Edge, or Firefox.</div>
+  </main>
+
+  <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
+  <script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/brush.js"></script>
+  <script type="module" src="painterly-viewer.js?v=mobile-1"></script>
+</body>
+</html>

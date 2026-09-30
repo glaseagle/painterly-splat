@@ -1,0 +1,9 @@
+{
+  "name": "painterly-splat",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "View-dependent p5.brush rendering of real Gaussian scans",
+  "scripts": { "test": "node --test tests/*.test.mjs" },
+  "engines": { "node": ">=24" }
+}
