@@ -204,6 +204,14 @@
     .scene-row button.is-active,
     .mode-row button.is-active { color: #111; background: var(--ink); }
     .scene-row button:disabled { cursor: wait; opacity: .5; }
+    .upload-splat { margin: 12px 0; }
+    #open-splat { width: 100%; min-height: 38px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; font: inherit; font-size: .75rem; }
+    #open-splat:disabled { opacity: .5; cursor: wait; }
+    #open-splat:hover:not(:disabled) { background: rgba(255,255,255,.08); }
+    #upload-status, .sharp-help { color: var(--muted); font-size: .65rem; line-height: 1.5; margin-top: 7px; overflow-wrap: anywhere; }
+    .sharp-help summary { cursor: pointer; }
+    .sharp-help p { margin: 7px 0; }
+    .sharp-help a { color: var(--ink); }
 
     .scene-meta {
       display: flex;
@@ -371,7 +379,7 @@
     <button class="menu-scrim" id="menu-scrim" type="button" aria-label="Close options" hidden tabindex="-1"></button>
     <aside class="control-panel" id="render-controls" aria-label="Rendering controls">
       <div class="panel-head">
-        <span>Public scan study</span>
+        <span id="source-type">Public scan study</span>
         <span class="live" id="render-status">Loading</span>
       </div>
 
@@ -383,6 +391,16 @@
       <div class="scene-meta">
         <a id="scene-source" href="https://jonbarron.info/mipnerf360/" target="_blank" rel="noopener">Loading public scan…</a>
         <span id="scene-count">—</span>
+      </div>
+
+      <div class="upload-splat">
+        <button id="open-splat" type="button" disabled>Open splat file</button>
+        <input id="splat-file" type="file" accept=".ply,.splat,.ksplat" hidden aria-label="Choose a Gaussian splat file" />
+        <div id="upload-status" role="status">.ply · .splat · .ksplat — stays on your device</div>
+        <details class="sharp-help">
+          <summary>From a photo with Apple SHARP</summary>
+          <p>Generate a .ply with <a href="https://github.com/apple/ml-sharp" target="_blank" rel="noopener">Apple SHARP</a>, then open it here. Its camera settings are read automatically. Photo generation runs separately from this viewer.</p>
+        </details>
       </div>
 
       <div class="mode-row" role="group" aria-label="Render mode">
@@ -426,6 +444,6 @@
 
   <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
   <script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/brush.js"></script>
-  <script type="module" src="painterly-viewer.js?v=ribbons-1"></script>
+  <script type="module" src="painterly-viewer.js?v=upload-1"></script>
 </body>
 </html>

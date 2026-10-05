@@ -2,7 +2,7 @@
 
 Real Gaussian scans rendered as view-dependent p5.brush strokes.
 
-**[Open the live demo](https://michael.software/painterly-splat?v=mobile-1)**
+**[Open the live demo](https://michael.software/painterly-splat?v=upload-1)**
 
 The train opens in Brush mode. Switch between Train, Bike, and Table, compare
 Splats / Hybrid / Brush, and adjust stroke size. The default size is the former
@@ -13,9 +13,32 @@ marks around detail, with broader washes in quiet regions. It starts at 75%; set
 it to 0 to compare the original brush rendering. Splats mode bypasses guidance.
 
 **Curved strokes** grow the selected marks into longer textured ribbons that
-follow the same contour field, stopping at depth and color boundaries so paint
-never drags across object edges. It starts at 65% and requires Contour flow
+follow the same contour field, stopping at detected depth and color boundaries to
+reduce paint crossing object edges. It starts at 65% and requires Contour flow
 above 0; set it to 0 to keep individual marks.
+
+**Open splat file** loads your own `.ply`, `.splat`, or `.ksplat` (up to 256 MB).
+Files stay in the browser and are never uploaded to a server. The bundled scenes
+remain available. Standard binary little-endian Gaussian PLYs are supported;
+ordinary mesh/point-cloud PLYs and compressed PlayCanvas PLYs are not. Files without
+camera metadata are framed automatically, and movement scales with their size.
+
+### Apple SHARP
+
+[Apple SHARP](https://github.com/apple/ml-sharp) is an optional way to create an
+input splat from one photograph. After installing it separately, run:
+
+```sh
+sharp predict -i /path/to/images -o /path/to/gaussians
+```
+
+Open the resulting `.ply` with **Open splat file**. The viewer reads SHARP's
+image dimensions, focal lengths and camera extrinsics (including legacy metadata)
+and uses its OpenCV orientation. Its additional PLY metadata is stripped from the
+rendering copy while preserving every vertex byte. A generated scene is best
+viewed near its original photo viewpoint; unseen surfaces are not a full scan.
+The website does not run SHARP inference or download its model. Prediction runs
+separately in Python on CPU, CUDA, or Apple MPS, as described in Apple's README.
 
 ## Run locally
 
@@ -69,6 +92,7 @@ Touch gestures use Three.js OrbitControls; desktop movement uses FlyControls.
 | `painterly-guidance.js` | Luminance/depth reference, contour and detail analysis |
 | `painterly-ribbons.js` | Curved-stroke ribbon tracing and textured fragment coordinates |
 | `painterly-touch.js` | Touch-only OrbitControls integration |
+| `painterly-upload.js` | Local file validation, SHARP camera metadata, automatic framing |
 | `painterly-scans/` | Full scans, source attribution, camera metadata |
 
 ## Tests
@@ -80,12 +104,14 @@ npm test
 ```
 
 Tests cover brush selection, camera-angle changes, touch orbit/pan/zoom,
-gesture transitions, and independence from desktop input.
+gesture transitions, independence from desktop input, local-file validation,
+SHARP/legacy camera metadata, vertex preservation, and robust scene framing.
 
 With the static server running, open `tests/guidance-browser.html` for GPU
 regressions (both half-float targets and the byte fallback). These exercise actual
 shaders on flat regions, vertical/horizontal/diagonal edges, depth boundaries,
-empty coverage, deterministic redraws, and resizing.
+empty coverage, deterministic redraws, and resizing. Ribbon fixtures exercise
+curvature, depth/color/coverage stops, viewport clipping, and deterministic paths.
 
 ## Credits
 

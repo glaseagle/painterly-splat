@@ -2,11 +2,11 @@ import { Vector3 } from 'three';
 import { OrbitControls } from './vendor/three/OrbitControls.js';
 
 // Upstream touch gestures, with mouse/keyboard navigation left to FlyControls.
-export function createTouchControls(camera, element, onChange) {
+export function createTouchControls(camera, element, onChange, options = {}) {
   const position = camera.position.clone(), rotation = camera.quaternion.clone();
   const orbit = new OrbitControls(camera);
   camera.position.copy(position); camera.quaternion.copy(rotation);
-  let distance = Math.max(.25, position.length());
+  let distance = options.distance ?? Math.max(.25, position.length());
   const direction = new Vector3();
   const syncTarget = () => {
     camera.getWorldDirection(direction);
@@ -15,7 +15,7 @@ export function createTouchControls(camera, element, onChange) {
   };
   syncTarget();
   orbit.rotateSpeed = .65;
-  orbit.minDistance = .05; orbit.maxDistance = 8;
+  orbit.minDistance = options.minDistance ?? .05; orbit.maxDistance = options.maxDistance ?? 8;
   orbit.enableDamping = false;
   const down = orbit._onPointerDown, move = orbit._onPointerMove, up = orbit._onPointerUp;
   orbit._onPointerDown = event => {
