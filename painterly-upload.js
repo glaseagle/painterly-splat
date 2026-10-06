@@ -92,19 +92,39 @@ export async function prepareLocalSplat(file) {
   return { blob, extension, camera: cameraFromPlyMetadata(metadata) };
 }
 
-export function fittedCamera(points) {
+export function sceneBounds(points) {
   const valid = points.filter(p => p.length === 3 && p.every(Number.isFinite));
   if (!valid.length) throw new Error('This splat contains no finite positions.');
   const axes = [0,1,2].map(axis => valid.map(p => p[axis]).sort((a,b) => a-b));
   const lows = axes.map(a => a[Math.floor((a.length-1)*0.02)]);
   const highs = axes.map(a => a[Math.ceil((a.length-1)*0.98)]);
   const center = lows.map((v,i) => (v+highs[i])*0.5);
-  const radius = Math.max(0.05, Math.hypot(...highs.map((v,i) => v-lows[i]))*0.5);
+  const radius = Math.hypot(...highs.map((v,i) => v-lows[i]))*0.5;
+  return { center, radius: radius > 1e-12 ? radius : 1 };
+}
+
+// Normalize geometry and camera together: projection stays unchanged for SHARP.
+// Relative extents, rather than a fixed radius floor, also handle microscopic scans.
+export function normalizeImport(points, captureCamera = null) {
+  const { center, radius } = sceneBounds(points);
+  const scale = 1 / radius;
+  const position = center.map(v => -v * scale);
+  const fit = fittedCamera(points.map(p => p.map((v,i) => (v-center[i])*scale)));
+  const camera = captureCamera ? { ...captureCamera,
+    position: captureCamera.position.map((v,i) => (v-center[i])*scale),
+    rotation: captureCamera.rotation.map(row => [...row]),
+  } : fit.camera;
+  return { scale: [scale,scale,scale], position, camera, radius: 1,
+    distance: captureCamera ? Math.max(1, Math.hypot(...camera.position)) : fit.distance };
+}
+
+export function fittedCamera(points) {
+  const { center, radius } = sceneBounds(points);
   const distance = radius / Math.sin(25*Math.PI/180) * 1.15;
   const focal = 480/(2*Math.tan(25*Math.PI/180));
   return {
     radius, distance,
     camera: { width:640, height:480, fx:focal, fy:focal,
-      position:[center[0],center[1],center[2]+distance], rotation:[[1,0,0],[0,-1,0],[0,0,-1]] },
+      position:[center[0],center[1],center[2]-distance], rotation:[[1,0,0],[0,1,0],[0,0,1]] },
   };
 }

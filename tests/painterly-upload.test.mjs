@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { prepareLocalSplat, parsePlyHeader, cameraFromPlyMetadata, fittedCamera, MAX_LOCAL_BYTES } from '../painterly-upload.js';
+import { prepareLocalSplat, parsePlyHeader, cameraFromPlyMetadata, fittedCamera, normalizeImport, MAX_LOCAL_BYTES } from '../painterly-upload.js';
 import { sharpFixture } from './upload-fixtures.mjs';
 
 test('SHARP metadata restores its camera and leaves every Gaussian byte intact', async () => {
@@ -55,6 +55,29 @@ test('automatic framing ignores invalid centers and sparse extreme outliers', ()
   points.push([1e9,1e9,1e9],[NaN,0,0]);
   const fit = fittedCamera(points);
   assert.ok(fit.radius < 2);
-  assert.ok(fit.camera.position[2] > fit.radius);
+  assert.ok(fit.camera.position[2] < -fit.radius);
   assert.throws(() => fittedCamera([[NaN,0,0]]), /finite/);
+});
+
+test('microscopic and enormous imports share the same normalized framing and OpenCV up', () => {
+  const points = Array.from({length:200},(_,i) => [i/100, Math.sin(i), i/200]);
+  const normal = normalizeImport(points);
+  for (const scale of [1e-7, 1e7]) {
+    const scaled = normalizeImport(points.map(p => p.map(v => (v+8)*scale)));
+    assert.ok(Math.abs(scaled.distance-normal.distance) < 1e-8);
+    assert.ok(scaled.camera.position.every((v,i) => Math.abs(v-normal.camera.position[i]) < 1e-8));
+  }
+  assert.deepEqual(normal.camera.rotation, [[1,0,0],[0,1,0],[0,0,1]]);
+});
+
+test('SHARP camera and geometry preserve their perspective after normalization', () => {
+  const points = [[1,2,8],[3,4,10],[2,3,9]];
+  const camera = cameraFromPlyMetadata({intrinsic:[512,512,640,480]});
+  const fit = normalizeImport(points, camera);
+  for (const point of points) {
+    const transformed = point.map((v,i) => v*fit.scale[i]+fit.position[i]-fit.camera.position[i]);
+    assert.ok(Math.abs(transformed[0]/transformed[2]-point[0]/point[2]) < 1e-12);
+    assert.ok(Math.abs(transformed[1]/transformed[2]-point[1]/point[2]) < 1e-12);
+  }
+  assert.deepEqual(fit.camera.rotation, camera.rotation);
 });

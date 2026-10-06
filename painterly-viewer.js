@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=ribbons-1';
 import { createPainterlyGuidance } from './painterly-guidance.js?v=ribbons-1';
-import { prepareLocalSplat, fittedCamera } from './painterly-upload.js?v=upload-1';
+import { prepareLocalSplat, normalizeImport } from './painterly-upload.js?v=capture-2';
+import { installCamera } from './painterly-camera.js?v=capture-2';
 import { FlyControls } from './vendor/three/FlyControls.js';
 import { createTouchControls } from './painterly-touch.js?v=upload-1';
-import { Viewer, RenderMode, SceneRevealMode, SceneFormat } from './vendor/gaussian-splats-3d/gaussian-splats-3d.module.js';
+import { Viewer, RenderMode, SceneRevealMode, PlyLoader, SplatLoader, KSplatLoader } from './vendor/gaussian-splats-3d/gaussian-splats-3d.module.js';
 
 const wrap = document.querySelector('#canvas-wrap');
 const status = document.querySelector('#render-status');
@@ -149,31 +150,19 @@ async function loadScene(id, local = null) {
     resetCamera();
     controls = makeControls();
     controls.enabled = false;
-    await viewer.addSplatScene(scene.fullAsset, {
+    if (scene.local) {
+      await viewer.addSplatBuffers([scene.buffer], [{ ...scene.transform, splatAlphaRemovalThreshold: 1 }], true, false, false);
+      scene.buffer = null;
+      controls.movementSpeed = scene.moveSpeed;
+      camera.near = .001;
+      camera.far = Math.max(100, scene.viewDistance*20);
+      resetCamera();
+    } else await viewer.addSplatScene(scene.fullAsset, {
       showLoadingUI: false, splatAlphaRemovalThreshold: 0,
-      ...(scene.local ? { format: scene.format, progressiveLoad: false } : {}),
       onProgress: (percent) => {
         loading.textContent = Number.isFinite(percent) ? `Loading full scan · ${Math.round(percent)}%` : 'Preparing full scan…';
       }
     });
-    if (scene.local) {
-      const points = [], point = new THREE.Vector3();
-      const splatCount = viewer.splatMesh.getSplatCount();
-      if (!splatCount) throw new Error('The file contains no Gaussian splats.');
-      const stride = Math.max(1, Math.floor(splatCount/8192));
-      for (let i = 0; i < splatCount; i += stride) {
-        viewer.splatMesh.getSplatCenter(i, point, true);
-        points.push(point.toArray());
-      }
-      const fit = fittedCamera(points);
-      scene.captureCamera = scene.fileCamera || fit.camera;
-      scene.viewDistance = scene.fileCamera ? Math.max(0.1, fit.radius) : fit.distance;
-      scene.moveSpeed = Math.max(0.025, fit.radius*0.25);
-      controls.movementSpeed = scene.moveSpeed;
-      camera.near = Math.min(0.01, fit.radius*0.001);
-      camera.far = Math.max(2000, fit.distance*20);
-      resetCamera();
-    }
     painterlyGuidance = createPainterlyGuidance(renderer, viewer.splatMesh);
     installBrushMaterial(viewer, brushTexture, mode, Number(density.value) / 100);
     viewer.splatMesh.material.uniforms.guideMap.value = painterlyGuidance.texture;
@@ -198,7 +187,8 @@ async function loadScene(id, local = null) {
     wrap.dataset.splatCount = String(viewer.splatMesh.getSplatCount());
     wrap.dataset.scene = id;
     status.textContent = 'Ready'; loading.hidden = true;
-    uploadStatus.textContent = scene.local ? (scene.fileCamera ? 'Camera metadata applied · file stays on this device' : 'View fitted automatically · file stays on this device') : '.ply · .splat · .ksplat — stays on your device';
+    document.querySelector('#flip-upright').hidden = !scene.local;
+    uploadStatus.textContent = scene.local ? (scene.generated ? 'SHARP splat · centered and scaled' : 'Centered and scaled · file stays on this device') : '.ply · .splat · .ksplat — stays on your device';
     changed();
     return true;
   } catch (e) {
@@ -290,27 +280,46 @@ openSplat.addEventListener('click', () => splatFile.click());
 splatFile.addEventListener('change', async () => {
   const file = splatFile.files[0];
   splatFile.value = '';
+  if (file) await openLocalFile(file);
+});
+async function openLocalFile(file, generated = false) {
   if (!file || loadingScene) return;
   openSplat.disabled = true;
   sceneButtons.forEach(b => { b.disabled = true; });
   uploadStatus.textContent = `Checking ${file.name}…`;
-  let objectURL;
   try {
     const prepared = await prepareLocalSplat(file);
-    objectURL = URL.createObjectURL(prepared.blob);
-    await loadScene('local', {
-      id: 'local', local: true, fullAsset: objectURL,
-      format: { ply: SceneFormat.Ply, splat: SceneFormat.Splat, ksplat: SceneFormat.KSplat }[prepared.extension],
-      fileCamera: prepared.camera, captureCamera: prepared.camera || fittedCamera([[0,0,0]]).camera,
-      detail: file.name,
+    const data = await prepared.blob.arrayBuffer();
+    const loader = { ply: PlyLoader, splat: SplatLoader, ksplat: KSplatLoader }[prepared.extension];
+    const buffer = await loader.loadFromFileData(data, 1, 0, false, 0);
+    const points = [], point = new THREE.Vector3(), color = new THREE.Vector4();
+    const total = buffer.getSplatCount(), stride = Math.max(1, Math.floor(total/8192));
+    for (let i = 0; i < total; i += stride) {
+      buffer.getSplatColor(i, color);
+      if (color.w < 8) continue;
+      buffer.getSplatCenter(i, point);
+      points.push(point.toArray());
+    }
+    const fit = normalizeImport(points, prepared.camera);
+    return await loadScene('local', {
+      id: 'local', local: true, generated, buffer,
+      transform: { position: fit.position, scale: fit.scale },
+      fileCamera: prepared.camera, captureCamera: fit.camera,
+      viewDistance: fit.distance, moveSpeed: .3, detail: file.name,
     });
   } catch (e) {
     uploadStatus.textContent = e.message;
+    return false;
   } finally {
-    if (objectURL) URL.revokeObjectURL(objectURL);
     openSplat.disabled = false;
     sceneButtons.forEach(b => { b.disabled = false; });
   }
+}
+document.querySelector('#flip-upright').addEventListener('click', () => {
+  if (!ready || !scene.local) return;
+  // A file without camera metadata cannot declare its up axis. Keep a manual roll correction.
+  scene.captureCamera.rotation = scene.captureCamera.rotation.map(([x,y,z]) => [-x,-y,z]);
+  resetCamera();
 });
 
 const menuButton = document.querySelector('#menu-toggle');
@@ -346,6 +355,7 @@ ribbons.addEventListener('input', () => {
 });
 mobile.addEventListener('change', () => setMenu(false));
 setMenu(false);
+installCamera({ openSplat: openLocalFile, setBrushMode: () => setMode('brush') });
 
 function tick(now) {
   const dt = Math.min(.05, (now - lastTick) / 1000); lastTick = now;

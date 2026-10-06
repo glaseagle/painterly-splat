@@ -136,6 +136,8 @@
       right: max(22px, env(safe-area-inset-right));
       bottom: max(22px, env(safe-area-inset-bottom));
       width: min(310px, calc(100vw - 44px));
+      max-height: calc(100dvh - 120px);
+      overflow-y: auto;
       padding: 15px;
       border: 1px solid var(--line);
       background: var(--panel);
@@ -212,6 +214,21 @@
     .sharp-help summary { cursor: pointer; }
     .sharp-help p { margin: 7px 0; }
     .sharp-help a { color: var(--ink); }
+    #flip-upright { margin-top: 7px; border: 1px solid var(--line); padding: 7px 10px; background: transparent; color: var(--ink); cursor: pointer; font-size: .7rem; }
+    #open-camera { width: 100%; margin-top: 7px; min-height: 38px; border: 1px solid var(--line); color: var(--ink); background: transparent; cursor: pointer; font-size: .75rem; }
+    #download-splat { display: block; margin-top: 9px; color: var(--ink); font-size: .75rem; }
+    #download-splat[hidden] { display: none; }
+    #camera-dialog { width: min(540px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow: auto; padding: 22px; color: var(--ink); background: #141413; border: 1px solid var(--line); border-radius: 16px; }
+    #camera-dialog::backdrop { background: rgba(0,0,0,.75); }
+    #camera-dialog h2 { margin: 0 0 12px; font: 500 1.4rem 'Space Grotesk', sans-serif; }
+    #camera-dialog p { font-size: .8rem; line-height: 1.5; color: var(--muted); }
+    #camera-dialog video, #camera-dialog img { display: block; width: 100%; max-height: 42vh; object-fit: contain; background: #000; border-radius: 8px; }
+    #camera-dialog video { transform: scaleX(-1); }
+    #camera-dialog [hidden] { display: none; }
+    .camera-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .camera-actions button { min-height: 44px; padding: 8px 12px; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+    .camera-actions button:disabled { opacity: .4; cursor: default; }
+    #generate-splat { background: var(--ink); color: #111; }
 
     .scene-meta {
       display: flex;
@@ -397,9 +414,12 @@
         <button id="open-splat" type="button" disabled>Open splat file</button>
         <input id="splat-file" type="file" accept=".ply,.splat,.ksplat" hidden aria-label="Choose a Gaussian splat file" />
         <div id="upload-status" role="status">.ply · .splat · .ksplat — stays on your device</div>
+        <button id="flip-upright" type="button" hidden>Flip upright</button>
+        <button id="open-camera" type="button">Camera / photo → splat</button>
+        <a id="download-splat" download="my-sharp-photo.ply" hidden>Download generated splat</a>
         <details class="sharp-help">
           <summary>From a photo with Apple SHARP</summary>
-          <p>Generate a .ply with <a href="https://github.com/apple/ml-sharp" target="_blank" rel="noopener">Apple SHARP</a>, then open it here. Its camera settings are read automatically. Photo generation runs separately from this viewer.</p>
+          <p>Use Camera / photo to generate a splat with <a href="https://github.com/apple/ml-sharp" target="_blank" rel="noopener">Apple SHARP</a>, or open an existing .ply. Camera settings are preserved, and imports are centered and scaled automatically.</p>
         </details>
       </div>
 
@@ -441,9 +461,27 @@
     <div class="loading-message" id="loading-message" role="status">Loading full scan…</div>
     <div class="error" id="error" role="alert">This study needs WebGL2. Try opening it in a current version of Chrome, Safari, Edge, or Firefox.</div>
   </main>
+  <dialog id="camera-dialog" aria-labelledby="camera-title">
+    <h2 id="camera-title">Turn a photo into a painting</h2>
+    <p>Capture one photo. Apple SHARP builds the 3D splat, then the painterly effect opens automatically.</p>
+    <video autoplay muted playsinline hidden aria-label="Webcam preview"></video>
+    <img hidden alt="Captured photo ready for generation" />
+    <div class="camera-actions">
+      <button id="start-camera" type="button">Start / retake camera</button>
+      <button id="capture-photo" type="button" disabled>Capture photo</button>
+      <button id="choose-photo" type="button">Choose photo</button>
+    </div>
+    <input id="photo-file" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+    <p role="status" aria-live="polite">Use your webcam or choose a photo.</p>
+    <p>Only Generate sends your photo to this site's processor. Photos are discarded after processing; generated splats expire within 10 minutes. Download yours to keep it.</p>
+    <div class="camera-actions">
+      <button id="generate-splat" type="button" disabled>Generate painterly splat</button>
+      <button id="close-camera" type="button">Close / cancel</button>
+    </div>
+  </dialog>
 
   <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
   <script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/brush.js"></script>
-  <script type="module" src="painterly-viewer.js?v=upload-1"></script>
+  <script type="module" src="painterly-viewer.js?v=capture-2"></script>
 </body>
 </html>

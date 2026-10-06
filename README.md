@@ -2,7 +2,7 @@
 
 Real Gaussian scans rendered as view-dependent p5.brush strokes.
 
-**[Open the live demo](https://michael.software/painterly-splat?v=upload-1)**
+**[Open the live demo](https://michael.software/painterly-splat?v=capture-2)**
 
 The train opens in Brush mode. Switch between Train, Bike, and Table, compare
 Splats / Hybrid / Brush, and adjust stroke size. The default size is the former
@@ -37,8 +37,9 @@ image dimensions, focal lengths and camera extrinsics (including legacy metadata
 and uses its OpenCV orientation. Its additional PLY metadata is stripped from the
 rendering copy while preserving every vertex byte. A generated scene is best
 viewed near its original photo viewpoint; unseen surfaces are not a full scan.
-The website does not run SHARP inference or download its model. Prediction runs
-separately in Python on CPU, CUDA, or Apple MPS, as described in Apple's README.
+The browser renders the splat; the optional photo-generation backend runs SHARP
+in Python on a Cloudflare CPU Container. See [backend setup](sharp-backend/README.md)
+for activation and local testing. Existing PLY files need no backend.
 
 ## Run locally
 
@@ -93,6 +94,8 @@ Touch gestures use Three.js OrbitControls; desktop movement uses FlyControls.
 | `painterly-ribbons.js` | Curved-stroke ribbon tracing and textured fragment coordinates |
 | `painterly-touch.js` | Touch-only OrbitControls integration |
 | `painterly-upload.js` | Local file validation, SHARP camera metadata, automatic framing |
+| `painterly-camera.js` | Webcam/photo preview, generation, progress, download |
+| `sharp-backend/` | CPU inference service, Cloudflare Container, setup and tests |
 | `painterly-scans/` | Full scans, source attribution, camera metadata |
 
 ## Tests
@@ -106,6 +109,18 @@ npm test
 Tests cover brush selection, camera-angle changes, touch orbit/pan/zoom,
 gesture transitions, independence from desktop input, local-file validation,
 SHARP/legacy camera metadata, vertex preservation, and robust scene framing.
+
+Imports now normalize geometry to a consistent radius around the origin, and
+transform an embedded capture camera by exactly the same amount. Generic imports
+use the common COLMAP/OpenCV convention (Y down, Z forward). Because a PLY without
+camera metadata cannot identify its up direction, **Flip upright** corrects
+opposite conventions. This also fixes microscopic scans without changing the file.
+
+**Camera / photo → splat** captures or opens a photo, sends it only when Generate
+is clicked, and opens the SHARP result in Brush mode. Cloudflare generation needs
+the paid Container setup described in [backend setup](sharp-backend/README.md).
+The local end-to-end flow works without Cloudflare. Generation availability is
+reported explicitly by the backend; local splat uploads always stay on device.
 
 With the static server running, open `tests/guidance-browser.html` for GPU
 regressions (both half-float targets and the byte fallback). These exercise actual
