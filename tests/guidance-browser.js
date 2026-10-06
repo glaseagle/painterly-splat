@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createGuideAnalysis } from '../painterly-guidance.js';
 import { checkRibbons } from './ribbon-browser.js';
+import { checkBrushes } from './brush-browser.js?v=brushes-2';
 
 const renderer = new THREE.WebGLRenderer();
 let passed = 0, failed = 0;
@@ -73,6 +74,7 @@ for (const type of types) {
   analysis.dispose(); input.dispose();
 }
 checkRibbons(renderer,check);
+checkBrushes(renderer,check);
 renderer.dispose();
 document.querySelector('#status').textContent = `${passed} passed, ${failed} failed`;
 document.title = `${failed ? 'FAIL' : 'PASS'} — Painterly guidance GPU regressions`;

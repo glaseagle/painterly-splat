@@ -8,6 +8,10 @@ export async function painterlyAPI(request, env) {
   const url = new URL(request.url);
   if (request.headers.get('Origin') && request.headers.get('Origin') !== url.origin) return json({error:'Use this website to generate a splat.'},403);
   if (env.PAINTERLY_LOCAL) {
+    if (url.pathname === PREFIX+'/jobs' && request.method === 'POST' && env.PAINTERLY_UPLOAD_LIMIT) {
+      const { success } = await env.PAINTERLY_UPLOAD_LIMIT.limit({key:request.headers.get('CF-Connecting-IP') || 'unknown'});
+      if (!success) return json({error:'Too many photo requests. Wait a minute and try again.'},429);
+    }
     try { return await env.PAINTERLY_LOCAL.getByName('local-generator').fetch(request); }
     catch { return json({error:'The photo queue is temporarily unavailable.'},503); }
   }

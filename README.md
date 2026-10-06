@@ -142,3 +142,20 @@ curvature, depth/color/coverage stops, viewport clipping, and deterministic path
 
 Vendored libraries retain their upstream license files. Scan data remains subject
 to its original source terms.
+
+
+### Expanded painterly tools
+
+The viewer now offers 18 selectable brush families, with eight stable variations
+per family (144 textures): all 11 tools in pinned p5.brush 2.2.3, plus watercolor,
+wet wash, dry brush, flat marker, hatching, bristle, and scumble. All-tools, paint,
+and drawing presets can be narrowed by toggling individual swatches.
+
+Matching uses each Gaussian's projected aspect, width, opacity, and luminance.
+Only similarly scoring tools can alternate; disabled tools are excluded. Size
+variation uses an independent stable hash from mark selection, retains the
+original size hierarchy and elongation, and makes finer marks around detail.
+Stroke size, size variation, and stroke density can be adjusted independently.
+
+Validation: `node --test tests/*.test.mjs`; open `tests/guidance-browser.html`
+for actual WebGL matching, scale, contour, and ribbon regressions.

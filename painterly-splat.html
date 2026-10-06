@@ -62,7 +62,13 @@
     #canvas-wrap:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
     #brush-palette { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; color: var(--muted); font-size: .6rem; }
     #brush-palette[hidden] { display: none; }
-    #brush-palette span { display: grid; gap: 2px; text-align: center; }
+    #brush-palette button { display: grid; gap: 2px; padding: 5px 2px; text-align: center; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+    #brush-palette button[aria-pressed="false"] { opacity: .35; }
+    #brush-palette button[aria-pressed="true"] { border-color: #8c7e65; background: #b3a38e12; }
+    #brush-palette button:focus-visible { outline: 2px solid var(--accent); }
+    .brush-options { margin-top: 12px; font-size: .7rem; }
+    .brush-options select { color: var(--ink); background: #24231f; border: 1px solid var(--line); padding: 6px; width: 100%; margin-top: 6px; }
+    .brush-options p { color: var(--muted); font-size: .62rem; line-height: 1.5; }
     #brush-palette canvas { width: 100%; height: 22px; }
     #brush-work { position: fixed; left: -10000px; top: 0; pointer-events: none; }
     .loading-message { position: absolute; z-index: 4; left: 50%; top: 43%; transform: translate(-50%, -50%); color: var(--ink); background: var(--panel); padding: 14px 20px; border: 1px solid var(--line); font-size: .8rem; pointer-events: none; }
@@ -442,6 +448,16 @@
       </div>
 
       <div class="control">
+        <label for="variation">Size variation</label>
+        <input id="variation" type="range" min="0" max="100" value="85" title="Mix broad and fine strokes while keeping Gaussian proportions." />
+        <output for="variation">85</output>
+      </div>
+      <div class="control">
+        <label for="stroke-density">Stroke density</label>
+        <input id="stroke-density" type="range" min="25" max="200" value="100" title="How many Gaussians become visible brush marks." />
+        <output for="stroke-density">100</output>
+      </div>
+      <div class="control">
         <label for="guidance">Contour flow</label>
         <input id="guidance" type="range" min="0" max="100" value="75" title="Follow contours and concentrate fine strokes around detail. Set to 0 for the original brush rendering." />
         <output for="guidance">75</output>
@@ -453,7 +469,15 @@
         <output for="ribbons">65</output>
       </div>
 
-      <div id="brush-palette" hidden aria-label="Available drawing tools"></div>
+      <div class="brush-options" id="brush-options">
+        <label for="brush-set">Drawing tools · <span id="brush-count">18 selected</span></label>
+        <select id="brush-set" aria-label="Brush collection">
+          <option value="all">All tools</option><option value="paint">Paint &amp; washes</option>
+          <option value="draw">Pencil &amp; ink</option><option value="custom" disabled>Custom selection</option>
+        </select>
+        <p>Tap tools to include them. Each Gaussian chooses a close match for its shape, size and tone.</p>
+        <div id="brush-palette" hidden role="group" aria-label="Available drawing tools"></div>
+      </div>
 
       <div class="panel-foot">
         <span id="view-note">Full scan · original capture view</span>
@@ -469,7 +493,7 @@
   </main>
   <dialog id="camera-dialog" aria-labelledby="camera-title">
     <h2 id="camera-title">Turn a photo into a painting</h2>
-    <p>Capture one photo. Apple SHARP builds the 3D splat, then the painterly effect opens automatically.</p>
+    <p>Photos are cleaned on Cloudflare before reaching the host PC. Apple SHARP builds the 3D splat, then the painterly effect opens automatically.</p>
     <video autoplay muted playsinline hidden aria-label="Webcam preview"></video>
     <img hidden alt="Captured photo ready for generation" />
     <div class="camera-actions">
@@ -488,6 +512,6 @@
 
   <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
   <script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/brush.js"></script>
-  <script type="module" src="painterly-viewer.js?v=fit-3"></script>
+  <script type="module" src="painterly-viewer.js?v=brushes-2"></script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=ribbons-1';
+import { brushFamilies } from './painterly-brush-matching.js?v=brushes-2';
+import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=brushes-2';
 import { createPainterlyGuidance } from './painterly-guidance.js?v=ribbons-1';
 import { prepareLocalSplat, normalizeImport, framedImportCamera } from './painterly-upload.js?v=fit-3';
 import { installCamera } from './painterly-camera.js?v=local-3';
@@ -16,6 +17,28 @@ const source = document.querySelector('#scene-source');
 const note = document.querySelector('#view-note');
 const density = document.querySelector('#density');
 const guidance = document.querySelector('#guidance');
+const variation = document.querySelector('#variation');
+const strokeDensity = document.querySelector('#stroke-density');
+const brushSet = document.querySelector('#brush-set');
+const enabledBrushes = brushFamilies.map(() => 1);
+function updateBrushSelection() {
+  document.querySelectorAll('[data-brush]').forEach(button => button.setAttribute('aria-pressed',String(Boolean(enabledBrushes[Number(button.dataset.brush)]))));
+  document.querySelector('#brush-count').textContent = `${enabledBrushes.filter(Boolean).length} selected`;
+  if (ready) viewer.splatMesh.material.uniforms.brushEnabled.value = [...enabledBrushes];
+  viewer?.forceRenderNextFrame();
+}
+brushSet.addEventListener('change', () => {
+  brushFamilies.forEach((b,i) => { enabledBrushes[i] = Number(brushSet.value === 'all' || b.group === brushSet.value); });
+  updateBrushSelection();
+});
+document.querySelector('#brush-palette').addEventListener('click', event => {
+  const button = event.target.closest('[data-brush]');
+  if (!button) return;
+  const index = Number(button.dataset.brush);
+  if (enabledBrushes[index] && enabledBrushes.filter(Boolean).length === 1) return;
+  enabledBrushes[index] = 1-enabledBrushes[index]; brushSet.value = 'custom';
+  updateBrushSelection();
+});
 const ribbons = document.querySelector('#ribbons');
 const openSplat = document.querySelector('#open-splat');
 const splatFile = document.querySelector('#splat-file');
@@ -170,7 +193,10 @@ async function loadScene(id, local = null) {
     viewer.splatMesh.material.uniforms.guideColor.value = painterlyGuidance.color;
     viewer.splatMesh.material.uniforms.ribbonStrength.value = Number(ribbons.value) / 100;
     viewer.splatMesh.material.uniforms.guideStrength.value = Number(guidance.value) / 100;
+    viewer.splatMesh.material.uniforms.sizeVariation.value = Number(variation.value)/100;
+    viewer.splatMesh.material.uniforms.strokeDensity.value = Number(strokeDensity.value)/100;
     ready = true; controls.enabled = true;
+    updateBrushSelection();
     touchControls = makeTouchControls();
     sceneButtons.forEach(b => {
       const active = b.dataset.scene === id;
@@ -216,19 +242,21 @@ function updateViewNote() {
 async function setMode(next) {
   const request = ++modeRequest;
   if (next !== 'splat') {
-    note.textContent = 'Mixing six brush families…';
+    note.textContent = `Mixing ${brushFamilies.length} brush families…`;
     try { brushTexture = await createBrushAtlas(); }
     catch (e) { error.textContent = e.message; error.style.display = 'block'; return; }
   }
   if (request !== modeRequest) return;
   mode = next;
   document.querySelector('#brush-palette').hidden = mode === 'splat';
+  document.querySelector('#brush-options').hidden = mode === 'splat';
+  updateBrushSelection();
   renderer?.setClearColor(mode === 'brush' ? 0xf3eddd : 0x0b0b0a, 1);
   document.querySelectorAll('[data-mode]').forEach(b => {
     const active = b.dataset.mode === mode;
     b.classList.toggle('is-active', active); b.setAttribute('aria-pressed', String(active));
   });
-  density.disabled = mode === 'splat';
+  density.disabled = variation.disabled = strokeDensity.disabled = mode === 'splat';
   guidance.disabled = mode === 'splat';
   ribbons.disabled = mode === 'splat' || Number(guidance.value) === 0;
   if (viewer?.splatMesh?.material?.uniforms.brushMix) {
@@ -352,6 +380,13 @@ document.addEventListener('keydown', e => {
     setMenu(false); menuButton.focus();
   }
 });
+for (const [control, uniform] of [[variation, 'sizeVariation'], [strokeDensity, 'strokeDensity']]) {
+  control.addEventListener('input', () => {
+    document.querySelector(`output[for="${control.id}"]`).value = control.value;
+    if (ready) viewer.splatMesh.material.uniforms[uniform].value = Number(control.value)/100;
+    viewer?.forceRenderNextFrame();
+  });
+}
 guidance.addEventListener('input', () => {
   document.querySelector('output[for="guidance"]').value = guidance.value;
   if (ready) viewer.splatMesh.material.uniforms.guideStrength.value = Number(guidance.value) / 100;
@@ -402,6 +437,7 @@ try {
   if (!response.ok) throw new Error('Scan index unavailable');
   manifest = await response.json();
   await setMode('brush');
+  if (!brushTexture) throw new Error(error.textContent || 'Could not prepare brushes.');
   requestAnimationFrame(tick);
   await loadScene('train');
 } catch (e) {

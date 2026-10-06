@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { brushFamilies, brushMatchGLSL } from './painterly-brush-matching.js';
+import { brushFamilies, brushMatchGLSL, BRUSH_VARIANTS, strokeSizingGLSL } from './painterly-brush-matching.js?v=brushes-2';
 import { ribbonVaryings, ribbonTraceGLSL, ribbonFragmentGLSL } from './painterly-ribbons.js?v=ribbons-1';
 
-const VARIANTS = 4, TILE = 128;
+const VARIANTS = BRUSH_VARIANTS, TILE = 128;
 let atlasPromise;
 
 export function createBrushAtlas() {
@@ -19,6 +19,11 @@ async function buildAtlas() {
   b.angleMode(b.RADIANS);
   b.add('scan-dry', { type: 'default', weight: 3, scatter: 1.3, sharpness: .9,
     grain: .35, opacity: 140, spacing: .13, pressure: [1.1, .5] });
+  b.add('scan-bristle', { type: 'default', weight: 2, scatter: .35, sharpness: .95,
+    grain: .18, opacity: 190, spacing: .18, pressure: [.25, 1.2, .4] });
+  b.add('scan-scumble', { type: 'default', weight: 5, scatter: 2, sharpness: .4,
+    grain: .22, opacity: 110, spacing: .3, pressure: [.4, 1, .35] });
+  b.add('scan-flat', { type: 'marker', weight: 5, scatter: .1, opacity: 170, spacing: .08, pressure: [.6, 1.1, .6] });
   const atlas = document.createElement('canvas'); atlas.width = TILE * VARIANTS; atlas.height = TILE * brushFamilies.length;
   const out = atlas.getContext('2d');
   const scratch = document.createElement('canvas'); scratch.width = 256; scratch.height = 128;
@@ -28,28 +33,26 @@ async function buildAtlas() {
     for (let variant = 0; variant < VARIANTS; variant++) {
       b.seed(1837 + family * 117 + variant * 31); b.noiseSeed(147 + variant * 43);
       b.clear('#ffffff'); b.noFill(); b.noHatch(); b.noStroke(); b.noField();
-      const bend = (variant - 1.5) * 2.7;
-      if (family === 0) {
-        b.fill('#000000', 150); b.fillBleed(.32, 'out'); b.fillTexture(.65, .6);
-        b.polygon(Array.from({ length: 14 }, (_, i) => {
-          const a = i * Math.PI / 7, r = 1 + .07 * Math.sin(i * 2.6 + variant);
+      const descriptor = brushFamilies[family], tool = descriptor.tool;
+      const bend = (variant - 3.5) * 2.2;
+      const pressure = .7 + (variant % 3) * .22;
+      if (tool === 'wash' || tool === 'wet-wash') {
+        b.fill('#000000', tool === 'wet-wash' ? 95 : 150);
+        b.fillBleed(tool === 'wet-wash' ? .55 : .32, 'out'); b.fillTexture(.65, .6);
+        b.polygon(Array.from({ length: 18 }, (_, i) => {
+          const a = i * Math.PI / 9, r = 1 + .1 * Math.sin(i * 2.6 + variant);
           return [87 * Math.cos(a) * r, 37 * Math.sin(a) * r];
         }));
-      } else if (family === 1) {
-        b.set('charcoal', '#000000', 12);
-        for (let j = -2; j <= 2; j++) b.spline([[-90, j * 6, .7], [-20, j * 6 + bend, 1.2], [45, j * 5 - bend, 1], [90, j * 4, .45]], .7);
-      } else if (family === 2) {
-        b.set('marker', '#000000', 14);
-        b.spline([[-88, -4, .5], [-25, bend, 1.1], [40, -bend, .95], [87, 3, .6]], .7);
-      } else if (family === 3) {
-        b.set('scan-dry', '#000000', 1.3);
-        for (let j = -3; j <= 3; j++) b.spline([[-94 + Math.abs(j) * 5, j * 3, .55], [-22, j * 3 + bend, 1], [48, j * 3 - bend, .7], [94 - Math.abs(j) * 3, j * 2, .2]], .7);
-      } else if (family === 4) {
-        b.set('2B', '#000000', 3);
-        for (let j = -1; j <= 1; j++) b.spline([[-98, j * 2, .25], [-28, bend + j * 2, 1.1], [35, -bend + j, .8], [97, j, .3]], .65);
       } else {
-        b.set('rotring', '#000000', 5);
-        b.spline([[-99, 0, .45], [-35, bend * .7, .9], [37, -bend * .5, 1], [99, 0, .2]], .65);
+        b.set(tool === 'hatching' ? 'pen' : tool, '#000000', descriptor.weight * (.85 + variant * .045));
+        const strands = tool === 'charcoal' ? 5 : tool === 'scan-dry' ? 7 :
+          tool === 'scan-bristle' ? 9 : tool === 'hatching' ? 7 : tool === 'scan-scumble' ? 7 : 1;
+        for (let j = 0; j < strands; j++) {
+          const y = (j-(strands-1)/2) * (tool === 'hatching' ? 8 : tool === 'charcoal' ? 6 : 3);
+          if (tool === 'hatching') b.line(-85, y-10, 85, y+10);
+          else b.spline([[-94+Math.abs(y)*.25, y, .25+variant*.025],
+            [-28, y+bend, pressure], [40, y-bend*.7, .8], [94-Math.abs(y)*.3, y*.8, .2]], .7);
+        }
       }
       b.render(); ctx.clearRect(0, 0, 256, 128); ctx.drawImage(canvas, 0, 0);
       const pixels = ctx.getImageData(0, 0, 256, 128);
@@ -79,7 +82,10 @@ async function buildAtlas() {
   texture.generateMipmaps = false; texture.minFilter = THREE.LinearFilter;
   const legend = document.querySelector('#brush-palette');
   legend.replaceChildren(...brushFamilies.map((family, i) => {
-    const item = document.createElement('span'); item.append(swatches[i], document.createTextNode(family.name)); return item;
+    const item = document.createElement('button'); item.type = 'button';
+    item.dataset.brush = String(i); item.setAttribute('aria-pressed', 'true');
+    item.title = `Include ${family.name} when matching Gaussian shapes`;
+    item.append(swatches[i], document.createTextNode(family.name)); return item;
   }));
   legend.dataset.brushFamilies = String(brushFamilies.length);
   legend.dataset.variants = String(VARIANTS * brushFamilies.length);
@@ -94,14 +100,17 @@ export function installBrushMaterial(viewer, texture, mode, size) {
   material.uniforms.pigmentMap = { value: texture || null };
   material.uniforms.brushMix = { value: mode === 'brush' ? 1 : mode === 'hybrid' ? .65 : 0 };
   material.uniforms.markSize = { value: size };
+  material.uniforms.sizeVariation = { value: .85 };
+  material.uniforms.strokeDensity = { value: 1 };
+  material.uniforms.brushEnabled = { value: brushFamilies.map(() => 1) };
   material.uniforms.guideMap = { value: null };
   material.uniforms.guideStrength = { value: 0 };
   material.uniforms.guideReference = { value: null };
   material.uniforms.guideColor = { value: null };
   material.uniforms.ribbonViewport = { value: new THREE.Vector2(1, 1) };
   material.uniforms.ribbonStrength = { value: 0.65 };
-  const declarations = 'uniform float brushMix;\nuniform float markSize;\nvarying vec4 vBrush;\n';
-  material.vertexShader = declarations + ribbonVaryings + ribbonTraceGLSL + 'uniform float guideStrength;\nuniform float ribbonStrength;\n' + brushMatchGLSL() + '\n' + material.vertexShader.replace(basisLine, `
+  const declarations = 'uniform float brushMix;\nuniform float markSize;\nuniform float sizeVariation;\nuniform float strokeDensity;\nvarying vec4 vBrush;\nvarying float vBrushStrength;\n';
+  material.vertexShader = declarations + ribbonVaryings + ribbonTraceGLSL + 'uniform float guideStrength;\nuniform float ribbonStrength;\n' + brushMatchGLSL() + strokeSizingGLSL + '\n' + material.vertexShader.replace(basisLine, `
     float major = length(basisVector1);
     float minor = length(basisVector2);
     vec4 guide = vec4(0.5, 0.5, 0.0, 0.0);
@@ -109,19 +118,21 @@ export function installBrushMaterial(viewer, texture, mode, size) {
       guide = texture2D(guideMap, clamp(ndcCenter.xy * 0.5 + 0.5, 0.0, 1.0));
     }
     float luma = dot(vColor.rgb, vec3(0.299, 0.587, 0.114));
-    float family = matchBrush(major / max(minor, 0.1), minor, vColor.a, luma);
-    // Integer hash stays attached to the Gaussian even when the sort order changes.
+    // Independent integer hashes keep scale, sampling and tool choice uncorrelated.
     uint h = splatIndex * 1664525u + 1013904223u;
     h ^= h >> 16u; h *= 2246822519u; h ^= h >> 13u;
     float seed = float(h & 65535u) / 65535.0;
-    float variant = float((h >> 16u) & 3u);
-    float target = mix(5.0, 23.0, markSize) * mix(0.7, 1.3, seed);
-    target *= mix(1.0, mix(1.35, 0.55, guide.a), guideStrength);
-    float strokeMajor = min(120.0, max(major, target));
-    float strokeMinor = min(55.0, max(minor, strokeMajor / max(1.3, major / max(minor, 0.1))));
+    uint sh = h * 3266489917u + 374761393u; sh ^= sh >> 15u;
+    float sizeSeed = float(sh & 65535u) / 65535.0;
+    float matchSeed = float((sh >> 16u) & 65535u) / 65535.0;
+    float variant = float((h >> 16u) & 7u);
+    float family = matchBrush(major / max(minor, 0.05), minor, vColor.a, luma, matchSeed);
+    vBrushStrength = brushStrength(family);
+    vec2 sized = strokeSize(major, minor, markSize, sizeVariation, sizeSeed, guide.a*guideStrength);
+    float strokeMajor = sized.x, strokeMinor = sized.y;
     float steering = guide.b * guideStrength;
     strokeMinor = mix(strokeMinor, min(strokeMinor, strokeMajor / 3.4), steering);
-    float keep = clamp((major * minor) / max(1.0, strokeMajor * strokeMinor), 0.012, 1.0);
+    float keep = clamp(strokeDensity * (major * minor) / max(1.0, strokeMajor * strokeMinor), 0.001, 1.0);
     // Enlarge a stable, area-weighted set of marks so individual strokes read at
     // screen scale. Other Gaussians remain as a translucent watercolor ground.
     float fade = max(0.002, keep * 0.18);
@@ -183,7 +194,7 @@ export function installBrushMaterial(viewer, texture, mode, size) {
       float opacity = gaussian * vColor.a;
       if (brushMix > 0.0) {
         vec2 uv = clamp(vPosition / 5.656854 + 0.5, 0.002, 0.998);
-        vec2 atlasUV = (vec2(vBrush.y, vBrush.x) + uv) / vec2(4.0, 6.0);
+        vec2 atlasUV = (vec2(vBrush.y, vBrush.x) + uv) / vec2(${VARIANTS.toFixed(1)}, ${brushFamilies.length.toFixed(1)});
         float pigment = texture2D(pigmentMap, atlasUV).a;
         float edge = smoothstep(0.0, 0.025, min(min(uv.x, uv.y), min(1.0-uv.x, 1.0-uv.y)));
         float stroke = pow(pigment, 0.65) * edge;
@@ -194,7 +205,7 @@ export function installBrushMaterial(viewer, texture, mode, size) {
           float width = ribbonInfo.y * taper;
           float coverage = 1.0-smoothstep(max(0.0, width-0.8), width+0.5, path.y);
           vec2 ribbonUV = vec2(clamp(path.x, 0.002, 0.998), clamp(0.5+path.y/max(2.0*width, 0.001), 0.002, 0.998));
-          float ribbonPigment = texture2D(pigmentMap, (vec2(vBrush.y,vBrush.x)+ribbonUV)/vec2(4.0,6.0)).a;
+          float ribbonPigment = texture2D(pigmentMap, (vec2(vBrush.y,vBrush.x)+ribbonUV)/vec2(${VARIANTS.toFixed(1)},${brushFamilies.length.toFixed(1)})).a;
           vec4 surface = texture2D(guideReference, ribbonAnchor + ribbonPixel / ribbonViewport);
           float depth = surface.g/max(surface.a,0.001);
           float visibility = (1.0-smoothstep(0.002,0.006,ribbonInfo.z-depth))*smoothstep(0.1,0.4,surface.a);
@@ -202,7 +213,7 @@ export function installBrushMaterial(viewer, texture, mode, size) {
           stroke = mix(stroke, curved, ribbonInfo.x);
         }
         // Fine lines are decisive; broad pigment stays translucent.
-        float strength = vBrush.x < 0.5 ? 0.6 : (vBrush.x > 3.5 ? 1.0 : 0.84);
+        float strength = vBrushStrength;
         float painted = mix(gaussian * 0.20, stroke * strength, vBrush.z) * vColor.a;
         opacity = mix(opacity, painted, brushMix);
         vec3 paper = vec3(0.95, 0.92, 0.85);

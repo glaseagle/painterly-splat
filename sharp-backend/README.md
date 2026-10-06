@@ -1,7 +1,7 @@
 # Photo → Apple SHARP → painterly splat
 
 The browser captures a JPEG only after the user clicks Capture. Generate submits
-that JPEG to `/api/painterly/jobs`. A CPU service runs official Apple SHARP,
+that JPEG to `/api/painterly/jobs`. The host service runs official Apple SHARP,
 returns a private job capability, and exposes progress and a PLY download. The
 viewer reads SHARP's camera metadata, normalizes the scene, and enables Brush mode.
 
@@ -10,6 +10,25 @@ JPEG in private R2 storage; the host PC polls an authenticated endpoint, runs
 SHARP, uploads the PLY, and releases inference memory. The browser retrieves the
 result using its private job token. No inbound port, router change or public PC
 service is needed. SQLite Durable Objects coordinate the queue on Workers Free.
+
+## Cloudflare image scrub
+
+Public uploads are never queued as received. The singleton queue reserves capacity
+and the daily budget before reading the body, reads at most 2 MB with a 15-second
+deadline, and asks the Images binding to inspect and fully decode/re-encode the
+JPEG. Inputs above 4 million pixels are rejected; outputs fit inside 1280 × 1280,
+with orientation applied and metadata disabled. A second pass removes every
+APP/COM segment and bytes after the JPEG end marker from the rebuilt output.
+Only successfully rebuilt bytes enter private R2 and receive `scrubVersion: 1`.
+The PC cannot claim or download legacy uncleaned jobs. Decoder, quota, or service
+failures reject the job; there is no fallback to the original image.
+
+The hosting Worker needs an `IMAGES` binding. Cloudflare Images Free supports
+5,000 transformations/month; this app's 30/day cap stays below that on its own.
+A separate Worker rate-limit binding rejects upload bursts before reaching the
+queue (5/minute/IP per Cloudflare location). This is additional abuse protection,
+not a global DDoS guarantee. Existing global queue and daily limits remain.
+The helper still runs under the host user's account, without an OS sandbox.
 
 ## Start or stop the host PC generator
 

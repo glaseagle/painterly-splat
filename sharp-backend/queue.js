@@ -1,3 +1,4 @@
+import { boundedBytes, scrubPhoto, MAX_PHOTO, SCRUB_VERSION, PhotoError } from './scrub.js';
 const PREFIX = '/api/painterly';
 const TTL = 10*60*1000;
 const reply = (body,status=200) => Response.json(body,{status,headers:{'Cache-Control':'no-store'}});
@@ -55,10 +56,7 @@ export class LocalQueue {
     if (Date.now()-(await this.ctx.storage.get('heartbeat') || 0) > 90000) return reply({error:'The host PC is offline. Start the local generator and try again.'},503);
     if (request.headers.get('Content-Type') !== 'image/jpeg') return reply({error:'Choose a JPEG photo.'},415);
     const length = Number(request.headers.get('Content-Length'));
-    if (!Number.isInteger(length) || length < 3 || length > 2*1024*1024) return reply({error:'Choose a photo under 2 MB.'},413);
-    // The browser always uploads a bounded, re-encoded JPEG with a known length.
-    const photo = new Uint8Array(await request.arrayBuffer());
-    if (photo.length !== length || photo[0] !== 255 || photo[1] !== 216) return reply({error:'Choose a valid JPEG photo.'},400);
+    if (!Number.isInteger(length) || length < 3 || length > MAX_PHOTO) return reply({error:'Choose a photo under 2 MB.'},413);
     const day = new Date().toISOString().slice(0,10);
     const hash = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(day+request.headers.get('CF-Connecting-IP')));
     const client = [...new Uint8Array(hash)].map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -77,11 +75,15 @@ export class LocalQueue {
     if (outcome) return reply({error:outcome},429);
     await this.scheduleCleanup();
     try {
+      // Reserve capacity/budget before reading bytes or spending a transformation.
+      const original = await boundedBytes(request.body);
+      if (original.length !== length || original[0] !== 255 || original[1] !== 216) throw new PhotoError('Choose a valid JPEG photo.');
+      const photo = await scrubPhoto(original, this.env.IMAGES);
       await this.env.PAINTERLY_FILES.put(id+'/photo',photo);
       const job = await this.ctx.storage.get('job:'+id);
       if (!job) { await this.purge(id); return reply({error:'Generation expired.'},410); }
-      await this.ctx.storage.put('job:'+id,{...job,state:'queued'});
-    } catch { await this.purge(id); return reply({error:'Could not queue the photo. Please try again.'},503); }
+      await this.ctx.storage.put('job:'+id,{...job,state:'queued',scrubVersion:SCRUB_VERSION});
+    } catch (error) { await this.purge(id); return reply({error:error instanceof PhotoError ? error.message : 'Could not queue the photo. Please try again.'},error instanceof PhotoError ? error.status : 503); }
     return reply({id,token,expiresIn:TTL/1000},202);
   }
 
@@ -94,7 +96,7 @@ export class LocalQueue {
         const jobs = await tx.list({prefix:'job:'});
         const valid = [...jobs].filter(([,j])=>j.expires>Date.now());
         if (valid.some(([,j])=>['processing','uploading'].includes(j.state))) return null;
-        const next = valid.filter(([,j])=>j.state==='queued').sort((a,b)=>a[1].expires-b[1].expires)[0];
+        const next = valid.filter(([,j])=>j.state==='queued' && j.scrubVersion===SCRUB_VERSION).sort((a,b)=>a[1].expires-b[1].expires)[0];
         if (!next) return null;
         const lease = random();
         await tx.put(next[0],{...next[1],state:'processing',lease});
@@ -109,6 +111,7 @@ export class LocalQueue {
     if (!job || job.expires <= Date.now() || request.headers.get('X-Job-Lease') !== job.lease || !['processing','uploading'].includes(job.state)) return reply({error:'Job expired or cancelled'},410);
     if (action === 'status' && request.method === 'GET') return reply({state:job.state});
     if (action === 'input' && request.method === 'GET') {
+      if (job.scrubVersion !== SCRUB_VERSION) return reply({error:'Photo must be submitted again for cleaning.'},410);
       const file = await this.env.PAINTERLY_FILES.get(id+'/photo');
       return file ? new Response(file.body,{headers:{'Content-Length':String(file.size),'Content-Type':'image/jpeg'}}) : reply({error:'Photo expired'},404);
     }
