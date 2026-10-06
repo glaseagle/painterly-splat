@@ -2,7 +2,7 @@
 
 Real Gaussian scans rendered as view-dependent p5.brush strokes.
 
-**[Open the live demo](https://michael.software/painterly-splat?v=capture-2)**
+**[Open the live demo](https://michael.software/painterly-splat?v=fit-3)**
 
 The train opens in Brush mode. Switch between Train, Bike, and Table, compare
 Splats / Hybrid / Brush, and adjust stroke size. The default size is the former
@@ -37,9 +37,10 @@ image dimensions, focal lengths and camera extrinsics (including legacy metadata
 and uses its OpenCV orientation. Its additional PLY metadata is stripped from the
 rendering copy while preserving every vertex byte. A generated scene is best
 viewed near its original photo viewpoint; unseen surfaces are not a full scan.
-The browser renders the splat; the optional photo-generation backend runs SHARP
-in Python on a Cloudflare CPU Container. See [backend setup](sharp-backend/README.md)
-for activation and local testing. Existing PLY files need no backend.
+The browser renders the splat; photo generation uses an outbound-only worker on
+the host PC, with a private Cloudflare queue. See [backend setup](sharp-backend/README.md)
+for start/stop instructions and the optional Cloudflare CPU Container route.
+Existing PLY files need no backend.
 
 ## Run locally
 
@@ -110,16 +111,18 @@ Tests cover brush selection, camera-angle changes, touch orbit/pan/zoom,
 gesture transitions, independence from desktop input, local-file validation,
 SHARP/legacy camera metadata, vertex preservation, and robust scene framing.
 
-Imports now normalize geometry to a consistent radius around the origin, and
-transform an embedded capture camera by exactly the same amount. Generic imports
+Imports normalize geometry, including sampled Gaussian footprints, to a consistent
+radius around the origin. Every import is reframed with padding, even when camera
+metadata supplies a close-up position. Camera orientation is preserved. Generic imports
 use the common COLMAP/OpenCV convention (Y down, Z forward). Because a PLY without
 camera metadata cannot identify its up direction, **Flip upright** corrects
-opposite conventions. This also fixes microscopic scans without changing the file.
+opposite conventions. **View size** pulls back or moves closer without modifying
+the file. Both microscopic and oversized scans use the same normalized framing.
 
 **Camera / photo → splat** captures or opens a photo, sends it only when Generate
-is clicked, and opens the SHARP result in Brush mode. Cloudflare generation needs
-the paid Container setup described in [backend setup](sharp-backend/README.md).
-The local end-to-end flow works without Cloudflare. Generation availability is
+is clicked, and opens the SHARP result in Brush mode. The host PC picks up photos
+from the private queue and sends results back; no public PC port is open. The
+optional all-cloud route needs a paid Container. Generation availability is
 reported explicitly by the backend; local splat uploads always stay on device.
 
 With the static server running, open `tests/guidance-browser.html` for GPU

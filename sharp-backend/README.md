@@ -5,10 +5,42 @@ that JPEG to `/api/painterly/jobs`. A CPU service runs official Apple SHARP,
 returns a private job capability, and exposes progress and a PLY download. The
 viewer reads SHARP's camera metadata, normalizes the scene, and enables Brush mode.
 
-The default deployment uses **Cloudflare Containers**, not the 128 MB Worker runtime.
-It needs Workers Paid. The existing live account was Free when this feature was
-prepared, so production generation remains unavailable until activation. The
-frontend detects that state and never submits a photo to an unavailable backend.
+The live deployment uses an **outbound-only local worker**. The website queues a
+JPEG in private R2 storage; the host PC polls an authenticated endpoint, runs
+SHARP, uploads the PLY, and releases inference memory. The browser retrieves the
+result using its private job token. No inbound port, router change or public PC
+service is needed. SQLite Durable Objects coordinate the queue on Workers Free.
+
+## Start or stop the host PC generator
+
+From PowerShell in this repository:
+
+```
+.\sharp-backend\start-local.ps1
+.\sharp-backend\stop-local.ps1
+```
+
+Configuration lives outside the repositories at
+`$env:USERPROFILE\.cache\painterly-sharp\local-worker.json`: `url`, `token`,
+`python` (the isolated SHARP interpreter) and `checkpoint`. The bearer secret
+must match the Worker's `PAINTERLY_WORKER_TOKEN`. Never commit this file. The
+live host configuration is installed with access restricted to its user and SYSTEM.
+Logs and the process ID live beside it. There is no automatic login/startup task.
+Keep the PC awake and connected; the site reports offline after 90 seconds
+without a heartbeat. Running the launcher twice does not start two workers.
+
+Each job uses a disposable inference process. CUDA is used when at least 10 GiB
+of GPU memory is free; otherwise inference uses CPU. Jobs run one at a time and
+are limited to seven minutes. Cancellation stops the owned inference process.
+The queue accepts at most two active jobs, 3 attempts per IP per UTC day and
+20 total per UTC day. Private photos and results expire after 10 minutes, with
+an R2 one-day lifecycle backstop if scheduled cleanup fails. Public tokens stop
+working at expiration regardless of storage cleanup. A stopped/disconnected
+generator fails an active job after two minutes. All GPU memory is released
+after each job; the idle polling process does not load the model.
+
+Cloudflare Containers remain an optional all-cloud alternative; that route
+requires Workers Paid. The local queue route does not require that upgrade.
 
 ## Local end-to-end development
 
@@ -26,8 +58,8 @@ binds only to loopback. There is no public PC service or startup task.
 ## Activate on Cloudflare
 
 In the **hosting repository** (`Michaelport`), `worker.js` imports `painterlyAPI`
-and exports `PainterlySharp`. The API returns an explicit unavailable status
-until `PAINTERLY_SHARP` is bound.
+and exports both backend classes. The activation script switches the binding from
+`PAINTERLY_LOCAL` to `PAINTERLY_SHARP` and keeps the existing migration history.
 
 After Workers Paid is enabled, run `node sharp-backend/enable-cloudflare.mjs`,
 review the changes to `wrangler.jsonc`, commit, and push. The existing production

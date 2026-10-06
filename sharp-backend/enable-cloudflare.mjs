@@ -8,7 +8,7 @@ config.containers = [...(config.containers || []).filter(c => c.class_name !== '
   images: { base: { dockerfile: './sharp-backend/Dockerfile' } },
 }];
 config.durable_objects ??= { bindings: [] };
-config.durable_objects.bindings = [...config.durable_objects.bindings.filter(b => b.name !== 'PAINTERLY_SHARP'),
+config.durable_objects.bindings = [...config.durable_objects.bindings.filter(b => !['PAINTERLY_SHARP','PAINTERLY_LOCAL'].includes(b.name)),
   {name:'PAINTERLY_SHARP',class_name:'PainterlySharp'}];
 config.migrations ??= [];
 if (!config.migrations.some(m => m.tag === 'painterly-sharp-v1')) {

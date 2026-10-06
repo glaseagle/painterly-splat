@@ -92,30 +92,36 @@ export async function prepareLocalSplat(file) {
   return { blob, extension, camera: cameraFromPlyMetadata(metadata) };
 }
 
-export function sceneBounds(points) {
-  const valid = points.filter(p => p.length === 3 && p.every(Number.isFinite));
+export function sceneBounds(points, radii = []) {
+  const valid = points.map((p,i) => ({ p, radius: Number.isFinite(radii[i]) ? Math.max(0,radii[i]) : 0 }))
+    .filter(({p}) => p.length === 3 && p.every(Number.isFinite));
   if (!valid.length) throw new Error('This splat contains no finite positions.');
-  const axes = [0,1,2].map(axis => valid.map(p => p[axis]).sort((a,b) => a-b));
-  const lows = axes.map(a => a[Math.floor((a.length-1)*0.02)]);
-  const highs = axes.map(a => a[Math.ceil((a.length-1)*0.98)]);
+  const lowAxes = [0,1,2].map(axis => valid.map(({p,radius}) => p[axis]-radius).sort((a,b) => a-b));
+  const highAxes = [0,1,2].map(axis => valid.map(({p,radius}) => p[axis]+radius).sort((a,b) => a-b));
+  const lows = lowAxes.map(a => a[Math.floor((a.length-1)*0.02)]);
+  const highs = highAxes.map(a => a[Math.ceil((a.length-1)*0.98)]);
   const center = lows.map((v,i) => (v+highs[i])*0.5);
   const radius = Math.hypot(...highs.map((v,i) => v-lows[i]))*0.5;
   return { center, radius: radius > 1e-12 ? radius : 1 };
 }
 
-// Normalize geometry and camera together: projection stays unchanged for SHARP.
-// Relative extents, rather than a fixed radius floor, also handle microscopic scans.
-export function normalizeImport(points, captureCamera = null) {
-  const { center, radius } = sceneBounds(points);
+// Include each Gaussian's footprint, not just its center. Preserve camera orientation,
+// but reframe every import: retaining a capture position can leave the camera inside it.
+export function normalizeImport(points, captureCamera = null, radii = [], fill = .65) {
+  const { center, radius } = sceneBounds(points, radii);
   const scale = 1 / radius;
   const position = center.map(v => -v * scale);
-  const fit = fittedCamera(points.map(p => p.map((v,i) => (v-center[i])*scale)));
-  const camera = captureCamera ? { ...captureCamera,
-    position: captureCamera.position.map((v,i) => (v-center[i])*scale),
-    rotation: captureCamera.rotation.map(row => [...row]),
-  } : fit.camera;
+  const camera = framedImportCamera(captureCamera, fill);
   return { scale: [scale,scale,scale], position, camera, radius: 1,
-    distance: captureCamera ? Math.max(1, Math.hypot(...camera.position)) : fit.distance };
+    distance: Math.hypot(...camera.position) };
+}
+
+export function framedImportCamera(captureCamera, fill = .65) {
+  const reference = captureCamera || fittedCamera([[0,0,0]]).camera;
+  const rotation = reference.rotation.map(row => [...row]);
+  const halfAngle = Math.atan(Math.min(reference.width/(2*reference.fx),reference.height/(2*reference.fy)));
+  const distance = 1 / Math.sin(halfAngle) / Math.max(.25,Math.min(1,fill));
+  return { ...reference, rotation, position: rotation.map(row => -row[2]*distance) };
 }
 
 export function fittedCamera(points) {

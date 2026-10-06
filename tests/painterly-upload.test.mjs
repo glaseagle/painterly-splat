@@ -70,14 +70,20 @@ test('microscopic and enormous imports share the same normalized framing and Ope
   assert.deepEqual(normal.camera.rotation, [[1,0,0],[0,1,0],[0,0,1]]);
 });
 
-test('SHARP camera and geometry preserve their perspective after normalization', () => {
+test('SHARP imports keep orientation but pull back from a close-up capture pose', () => {
   const points = [[1,2,8],[3,4,10],[2,3,9]];
   const camera = cameraFromPlyMetadata({intrinsic:[512,512,640,480]});
   const fit = normalizeImport(points, camera);
-  for (const point of points) {
-    const transformed = point.map((v,i) => v*fit.scale[i]+fit.position[i]-fit.camera.position[i]);
-    assert.ok(Math.abs(transformed[0]/transformed[2]-point[0]/point[2]) < 1e-12);
-    assert.ok(Math.abs(transformed[1]/transformed[2]-point[1]/point[2]) < 1e-12);
-  }
+  const halfAngle = Math.atan(camera.height/(2*camera.fy));
+  assert.ok(Math.asin(1/fit.distance) < halfAngle*.7);
   assert.deepEqual(fit.camera.rotation, camera.rotation);
+});
+
+test('wide Gaussian footprints are included even when all centers nearly coincide', () => {
+  const points = [[0,0,0],[.001,0,0],[0,.001,0]];
+  const compact = normalizeImport(points);
+  const broad = normalizeImport(points,null,[3,3,3]);
+  assert.ok(broad.scale[0] < compact.scale[0]/1000);
+  const smaller = normalizeImport(points,null,[3,3,3],.35);
+  assert.ok(smaller.distance > broad.distance*1.8);
 });

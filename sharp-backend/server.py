@@ -24,7 +24,7 @@ checkpoint = os.environ.get('SHARP_CHECKPOINT', '/models/sharp.pt')
 Image.MAX_IMAGE_PIXELS = 4_000_000
 
 
-def predict(photo, output):
+def predict(photo, output, device='cpu'):
     global model
     import numpy as np
     import torch
@@ -38,12 +38,13 @@ def predict(photo, output):
         model.load_state_dict(state, assign=True)
         del state
         model.eval()
+    model.to(device)
     with Image.open(io.BytesIO(photo)) as source:
         image = np.asarray(ImageOps.exif_transpose(source).convert('RGB'))
     height, width = image.shape[:2]
     # Webcams rarely provide EXIF focal length. Same 30 mm equivalent fallback as SHARP.
     focal = 30 * (width * width + height * height) ** .5 / (36 * 36 + 24 * 24) ** .5
-    gaussians = predict_image(model, image, focal, torch.device('cpu'))
+    gaussians = predict_image(model, image, focal, torch.device(device))
     save_ply(gaussians, focal, (height, width), output)
 
 

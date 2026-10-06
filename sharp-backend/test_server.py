@@ -1,4 +1,5 @@
 import importlib.util
+import http.client
 import io
 import json
 from pathlib import Path
@@ -39,7 +40,13 @@ class JobsTest(unittest.TestCase):
 
     def test_unreadable_photo_rejected_before_inference(self):
         self.assertEqual(self.request('/jobs','POST',b'not-a-jpeg')[0],400)
-        self.assertEqual(self.request('/jobs','POST',bytes(server.MAX_IMAGE+1))[0],413)
+        connection = http.client.HTTPConnection('127.0.0.1',self.http.server_port)
+        connection.putrequest('POST','/api/painterly/jobs')
+        connection.putheader('Content-Type','image/jpeg')
+        connection.putheader('Content-Length',str(server.MAX_IMAGE+1))
+        connection.endheaders()
+        self.assertEqual(connection.getresponse().status,413)
+        connection.close()
 
     def test_private_job_result_cancel_and_single_inference(self):
         started = threading.Event()

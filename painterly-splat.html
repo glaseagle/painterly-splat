@@ -272,6 +272,7 @@
     }
 
     .control output { text-align: right; font-variant-numeric: tabular-nums; }
+    .control[hidden] { display: none; }
 
     input[type="range"] {
       width: 100%;
@@ -415,6 +416,11 @@
         <input id="splat-file" type="file" accept=".ply,.splat,.ksplat" hidden aria-label="Choose a Gaussian splat file" />
         <div id="upload-status" role="status">.ply · .splat · .ksplat — stays on your device</div>
         <button id="flip-upright" type="button" hidden>Flip upright</button>
+        <div class="control" id="import-frame-control" hidden>
+          <label for="import-frame">View size</label>
+          <input id="import-frame" type="range" min="25" max="100" value="65" title="Lower this to pull back and make the imported scene smaller." />
+          <output for="import-frame">65</output>
+        </div>
         <button id="open-camera" type="button">Camera / photo → splat</button>
         <a id="download-splat" download="my-sharp-photo.ply" hidden>Download generated splat</a>
         <details class="sharp-help">
@@ -482,6 +488,6 @@
 
   <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
   <script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/brush.js"></script>
-  <script type="module" src="painterly-viewer.js?v=capture-2"></script>
+  <script type="module" src="painterly-viewer.js?v=fit-3"></script>
 </body>
 </html>

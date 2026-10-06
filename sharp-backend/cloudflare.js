@@ -1,10 +1,16 @@
 import { DurableObject } from 'cloudflare:workers';
+import { LocalQueue } from './queue.js';
 
 const PREFIX = '/api/painterly';
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 
 export async function painterlyAPI(request, env) {
   const url = new URL(request.url);
+  if (request.headers.get('Origin') && request.headers.get('Origin') !== url.origin) return json({error:'Use this website to generate a splat.'},403);
+  if (env.PAINTERLY_LOCAL) {
+    try { return await env.PAINTERLY_LOCAL.getByName('local-generator').fetch(request); }
+    catch { return json({error:'The photo queue is temporarily unavailable.'},503); }
+  }
   if (url.pathname === PREFIX+'/status') {
     return json({ available: Boolean(env.PAINTERLY_SHARP), engine: 'Apple SHARP',
       message: env.PAINTERLY_SHARP ? 'CPU generation usually takes a few minutes.' : 'Photo generation is awaiting Cloudflare compute setup. You can still open a splat file.' });
@@ -21,6 +27,12 @@ export async function painterlyAPI(request, env) {
   } catch {
     return json({ error: 'The generator is restarting. Please try again shortly.' }, 503);
   }
+}
+
+export class PainterlyLocal extends DurableObject {
+  constructor(ctx,env) { super(ctx,env); this.queue = new LocalQueue(ctx,env); }
+  fetch(request) { return this.queue.fetch(request); }
+  alarm() { return this.queue.alarm(); }
 }
 
 export class PainterlySharp extends DurableObject {

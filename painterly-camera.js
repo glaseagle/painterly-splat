@@ -28,7 +28,7 @@ export function installCamera({ openSplat, setBrushMode }) {
       const response = await fetch('/api/painterly/status', { cache: 'no-store' });
       const info = await response.json();
       available = response.ok && info.available;
-      if (!available) message.textContent = info.message || 'Photo generation is currently unavailable.';
+      message.textContent = info.message || (available ? 'The generator is ready.' : 'Photo generation is currently unavailable.');
     } catch { available = false; message.textContent = 'Photo generation is currently unavailable.'; }
     generate.disabled = !photo || !available || busy;
   }

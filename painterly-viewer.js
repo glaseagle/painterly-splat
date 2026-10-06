@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=ribbons-1';
 import { createPainterlyGuidance } from './painterly-guidance.js?v=ribbons-1';
-import { prepareLocalSplat, normalizeImport } from './painterly-upload.js?v=capture-2';
-import { installCamera } from './painterly-camera.js?v=capture-2';
+import { prepareLocalSplat, normalizeImport, framedImportCamera } from './painterly-upload.js?v=fit-3';
+import { installCamera } from './painterly-camera.js?v=local-3';
 import { FlyControls } from './vendor/three/FlyControls.js';
 import { createTouchControls } from './painterly-touch.js?v=upload-1';
 import { Viewer, RenderMode, SceneRevealMode, PlyLoader, SplatLoader, KSplatLoader } from './vendor/gaussian-splats-3d/gaussian-splats-3d.module.js';
@@ -188,6 +188,7 @@ async function loadScene(id, local = null) {
     wrap.dataset.scene = id;
     status.textContent = 'Ready'; loading.hidden = true;
     document.querySelector('#flip-upright').hidden = !scene.local;
+    document.querySelector('#import-frame-control').hidden = !scene.local;
     uploadStatus.textContent = scene.local ? (scene.generated ? 'SHARP splat · centered and scaled' : 'Centered and scaled · file stays on this device') : '.ply · .splat · .ksplat — stays on your device';
     changed();
     return true;
@@ -292,15 +293,18 @@ async function openLocalFile(file, generated = false) {
     const data = await prepared.blob.arrayBuffer();
     const loader = { ply: PlyLoader, splat: SplatLoader, ksplat: KSplatLoader }[prepared.extension];
     const buffer = await loader.loadFromFileData(data, 1, 0, false, 0);
-    const points = [], point = new THREE.Vector3(), color = new THREE.Vector4();
+    const points = [], radii = [], point = new THREE.Vector3(), color = new THREE.Vector4();
+    const gaussianScale = new THREE.Vector3(), gaussianRotation = new THREE.Quaternion();
     const total = buffer.getSplatCount(), stride = Math.max(1, Math.floor(total/8192));
     for (let i = 0; i < total; i += stride) {
       buffer.getSplatColor(i, color);
       if (color.w < 8) continue;
       buffer.getSplatCenter(i, point);
       points.push(point.toArray());
+      buffer.getSplatScaleAndRotation(i, gaussianScale, gaussianRotation);
+      radii.push(3*Math.max(gaussianScale.x,gaussianScale.y,gaussianScale.z));
     }
-    const fit = normalizeImport(points, prepared.camera);
+    const fit = normalizeImport(points, prepared.camera, radii, Number(document.querySelector('#import-frame').value)/100);
     return await loadScene('local', {
       id: 'local', local: true, generated, buffer,
       transform: { position: fit.position, scale: fit.scale },
@@ -319,6 +323,13 @@ document.querySelector('#flip-upright').addEventListener('click', () => {
   if (!ready || !scene.local) return;
   // A file without camera metadata cannot declare its up axis. Keep a manual roll correction.
   scene.captureCamera.rotation = scene.captureCamera.rotation.map(([x,y,z]) => [-x,-y,z]);
+  resetCamera();
+});
+document.querySelector('#import-frame').addEventListener('input', e => {
+  document.querySelector('output[for="import-frame"]').value = e.target.value;
+  if (!ready || !scene.local) return;
+  scene.captureCamera = framedImportCamera(scene.captureCamera, Number(e.target.value)/100);
+  scene.viewDistance = Math.hypot(...scene.captureCamera.position);
   resetCamera();
 });
 
