@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -14,12 +15,18 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--config', type=Path, required=True)
 args = parser.parse_args()
 config = json.loads(args.config.read_text())
+job_root = (args.config.parent/'jobs').resolve()
+job_root.mkdir(exist_ok=True)
+for stale in job_root.glob('job-*'):
+    if stale.is_dir() and stale.resolve().parent == job_root and time.time()-stale.stat().st_mtime > 600:
+        shutil.rmtree(stale)
 base = config['url'].rstrip('/')+'/api/painterly/worker/'
 if not base.startswith('https://'):
     raise ValueError('The bridge requires HTTPS')
 
 def call(path, method='POST', body=None, lease=None, timeout=120):
-    headers = {'Authorization':'Bearer '+config['token']}
+    headers = {'Authorization':'Bearer '+config['token'],
+               'User-Agent':'PainterlySplat-LocalWorker/1.0 (+https://michael.software/painterly-splat)'}
     if lease: headers['X-Job-Lease'] = lease
     req = urllib.request.Request(base+path, data=body, headers=headers, method=method)
     return urllib.request.urlopen(req,timeout=timeout)
@@ -39,7 +46,7 @@ while True:
         if job:
             route = 'jobs/'+job['id']+'/'
             lease = job['lease']
-            with tempfile.TemporaryDirectory(prefix='painterly-local-') as folder:
+            with tempfile.TemporaryDirectory(prefix='job-',dir=job_root) as folder:
                 photo = Path(folder)/'photo.jpg'
                 output = Path(folder)/'scene.ply'
                 with call(route+'input','GET',lease=lease) as response:
@@ -49,7 +56,8 @@ while True:
                 command = [sys.executable,str(Path(__file__).with_name('infer.py')),
                            '--photo',str(photo),'--output',str(output),'--checkpoint',config['checkpoint']]
                 started = time.monotonic()
-                with subprocess.Popen(command, creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0)) as process:
+                with subprocess.Popen(command, stdout=sys.stdout, stderr=sys.stderr,
+                                      creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0)) as process:
                     while process.poll() is None:
                         if time.monotonic()-started > 420:
                             stop_inference(process); raise TimeoutError('Inference timed out')
@@ -62,7 +70,10 @@ while True:
                             if error.code in (404,410): stop_inference(process); break
                         except OSError: pass
                         time.sleep(10)
-                    if process.wait() != 0: raise RuntimeError('Inference stopped or failed')
+                    code = process.wait()
+                    if code != 0:
+                        print('Inference process exited with code '+str(code),flush=True)
+                        raise RuntimeError('Inference stopped or failed')
                 with output.open('rb') as file:
                     # urllib uses Content-Length for bytes; Cloudflare streams the result straight to R2.
                     with call(route+'result','PUT',file.read(),lease,timeout=180) as response:
@@ -71,7 +82,7 @@ while True:
     except KeyboardInterrupt:
         break
     except Exception as error:
-        print('Generator request failed: '+type(error).__name__,flush=True)
+        print('Generator request failed: '+type(error).__name__+' '+str(getattr(error,'code','')),flush=True)
         if job:
             try:
                 with call('jobs/'+job['id']+'/fail',lease=job['lease']): pass

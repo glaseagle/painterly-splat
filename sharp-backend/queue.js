@@ -68,7 +68,7 @@ export class LocalQueue {
       if ([...jobs.values()].filter(j=>j.expires>Date.now() && ['receiving','queued','processing','uploading'].includes(j.state)).length >= 2) return 'The generator is busy. Try again shortly.';
       let budget = await tx.get('budget');
       if (budget?.day !== day) budget = {day,total:0,clients:{}};
-      if (budget.total >= 20 || (budget.clients[client] || 0) >= 3) return 'The daily generation limit has been reached.';
+      if (budget.total >= 30 || (budget.clients[client] || 0) >= 10) return 'The daily generation limit has been reached.';
       budget.total++; budget.clients[client] = (budget.clients[client] || 0)+1;
       await tx.put('budget',budget);
       await tx.put('job:'+id,{token,state:'receiving',expires:Date.now()+TTL});

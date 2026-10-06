@@ -32,12 +32,20 @@ without a heartbeat. Running the launcher twice does not start two workers.
 Each job uses a disposable inference process. CUDA is used when at least 10 GiB
 of GPU memory is free; otherwise inference uses CPU. Jobs run one at a time and
 are limited to seven minutes. Cancellation stops the owned inference process.
-The queue accepts at most two active jobs, 3 attempts per IP per UTC day and
-20 total per UTC day. Private photos and results expire after 10 minutes, with
+The queue accepts at most two active jobs, 10 attempts per IP per UTC day and
+30 total per UTC day. Private photos and results expire after 10 minutes, with
 an R2 one-day lifecycle backstop if scheduled cleanup fails. Public tokens stop
 working at expiration regardless of storage cleanup. A stopped/disconnected
 generator fails an active job after two minutes. All GPU memory is released
-after each job; the idle polling process does not load the model.
+after each job; the idle polling process does not load the model. Temporary local
+files live in the configuration folder's `jobs` directory and are removed after
+each job or by Stop. Startup removes abandoned job folders older than 10 minutes.
+
+Verified through the production website on 2026-10-06: a public test photo was
+queued, processed on the host RTX 5090, returned as a 66 MB / 1,179,648-Gaussian
+PLY, and opened automatically in Brush mode. PC inference plus result upload took
+27.3 seconds (queue polling and browser loading add time). The inference child
+sets its own Conda CUDA DLL search path; no system PATH changes are needed.
 
 Cloudflare Containers remain an optional all-cloud alternative; that route
 requires Workers Paid. The local queue route does not require that upgrade.
