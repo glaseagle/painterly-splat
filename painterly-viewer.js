@@ -21,6 +21,7 @@ const lineAmount = document.querySelector('#line-amount');
 const edgeDetail = document.querySelector('#edge-detail');
 const lineWidth = document.querySelector('#line-width');
 const lineStatus = document.querySelector('#line-status');
+const autoOrbit = document.querySelector('#auto-orbit');
 const variation = document.querySelector('#variation');
 const strokeDensity = document.querySelector('#stroke-density');
 const brushSet = document.querySelector('#brush-set');
@@ -54,7 +55,7 @@ let drag = null, loadingScene = false;
 let sortPending = false, lastSort = 0;
 let lineArt, orbitControls, cursor, cursorScene;
 let navMode = 'orbit', placingCursor = false, pivotPending = true;
-let viewDirty = true, lineDirty = true, lastNavigation = 0, lineRevision = 0;
+let viewDirty = true, lineDirty = true, lastNavigation = 0, lastLineBuild = 0, lineRevision = 0;
 
 function configureNavigation() {
   orbitControls?.dispose(); orbitControls = null;
@@ -64,6 +65,8 @@ function configureNavigation() {
     orbitControls = createOrbitCamera(camera, wrap, cursor.root.position, () => {
       cursor.root.position.copy(orbitControls.target); changed();
     });
+    orbitControls.autoRotate = autoOrbit.checked;
+    orbitControls.autoRotateSpeed = .55;
     orbitControls.enabled = ready && !placingCursor;
   } else {
     touchControls = makeTouchControls(); touchControls.enabled = ready && !placingCursor;
@@ -97,8 +100,15 @@ document.querySelector('#place-cursor').addEventListener('click',()=>{
   if(placingCursor && mobile.matches)setMenu(false);
 });
 document.querySelector('#show-cursor').addEventListener('change',()=>viewer?.forceRenderNextFrame());
+autoOrbit.addEventListener('change',()=>{
+  if(autoOrbit.checked){clearMovement();navMode='orbit';}
+  configureNavigation();changed();
+  lineStatus.textContent=autoOrbit.checked?'Line art updates live during auto orbit.':(lineArt?.count?`${lineArt.count.toLocaleString()} strokes · projected into the scene`:'Line art updates after the camera stops.');
+});
 document.querySelectorAll('[data-camera]').forEach(button=>button.addEventListener('click',()=>{
-  if(!ready)return;clearMovement();navMode=button.dataset.camera;configureNavigation();
+  if(!ready)return;clearMovement();navMode=button.dataset.camera;
+  if(navMode==='fly')autoOrbit.checked=false;
+  configureNavigation();
 }));
 wrap.addEventListener('dblclick',placeCursor);
 wrap.addEventListener('click',event=>{if(placingCursor)placeCursor(event);});
@@ -453,7 +463,7 @@ function tick(now) {
   const dt = Math.min(.05, (now - lastTick) / 1000); lastTick = now;
   if (ready && !document.hidden) {
     if(navMode==='fly'&&!placingCursor)controls.update(dt);
-    else if(!placingCursor)orbitControls?.update();
+    else if(!placingCursor)orbitControls?.update(dt);
     camera.updateMatrixWorld(true);
     // These trained scenes use normalized units; refresh ordering for small moves
     // as well as the viewer's default one-unit translation threshold.
@@ -465,7 +475,10 @@ function tick(now) {
     viewer.update();
     // Instant reveal has no animation; don't keep rendering an invisible fade.
     viewer.splatMesh.visibleRegionChanging = false;
-    const rebuild=mode!=='splat' && Number(lineAmount.value)>0 && lineDirty && now-lastNavigation>180 && !viewer.sortRunning && !sortPending;
+    const rotating=autoOrbit.checked && navMode==='orbit' && !placingCursor;
+    const liveLineRefresh=rotating && now-lastLineBuild>=140 && !viewer.sortRunning;
+    const settledLineRefresh=!rotating && now-lastNavigation>180 && !viewer.sortRunning && !sortPending;
+    const rebuild=mode!=='splat' && Number(lineAmount.value)>0 && lineDirty && (liveLineRefresh||settledLineRefresh);
     if (viewer.shouldRender() || viewDirty || rebuild) {
       if(viewDirty || !lineArt.hasDepth){lineArt.captureDepth(camera,wrap.clientWidth,wrap.clientHeight);viewDirty=false;}
       if(pivotPending){
@@ -476,8 +489,8 @@ function tick(now) {
       }
       if(rebuild){
         lineArt.rebuild(camera,wrap.clientWidth,wrap.clientHeight,Number(edgeDetail.value)/100,enabledBrushes);
-        lineDirty=false;wrap.dataset.lineStrokes=String(lineArt.count);wrap.dataset.lineRevision=String(++lineRevision);
-        lineStatus.textContent=`${lineArt.count.toLocaleString()} strokes · projected into the scene`;
+        lineDirty=false;lastLineBuild=now;wrap.dataset.lineStrokes=String(lineArt.count);wrap.dataset.lineRevision=String(++lineRevision);
+        lineStatus.textContent=rotating?`${lineArt.count.toLocaleString()} strokes · updating live`:`${lineArt.count.toLocaleString()} strokes · projected into the scene`;
       }
       if(mode==='lines')renderer.clear();else viewer.render();
       if(mode!=='splat')lineArt.render(camera,Number(lineAmount.value)/100,.5+Number(lineWidth.value)*.045);

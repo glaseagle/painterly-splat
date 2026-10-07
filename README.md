@@ -10,7 +10,8 @@ from 18 brush families, and adjust stroke size, variation, density, and line art
 Drag to orbit the visible surface. Double-click a surface, or use **Place 3D cursor**
 and click/tap, to set the orbit pivot. Right-drag pans; wheel/pinch zooms. The cursor
 is a world-space marker with three axes and rings. Hide it with **Show cursor**.
-**Fly** retains the original free camera; **Reset view** restores the capture view.
+**Auto orbit** turns continuously around the cursor and refreshes projected line
+art while it moves. **Fly** retains the original free camera; **Reset view** restores the capture view.
 
 **Line art** replaces the former Contour flow and Curved strokes controls. A Canny
 pass detects edges in the unpainted splats, traces connected paths, samples scene

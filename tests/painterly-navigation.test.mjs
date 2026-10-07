@@ -20,6 +20,11 @@ test('right-drag pans camera and orbit pivot together',()=>{
  surface.pointer('pointerdown',300,300,2);surface.pointer('pointermove',350,330,2);surface.pointer('pointerup',350,330,2);
  assert.ok(controls.target.length()>.01);assert.ok(camera.position.clone().sub(controls.target).distanceTo(relative)<1e-6);controls.dispose();
 });
+test('auto orbit advances by elapsed time while preserving its pivot and radius',()=>{
+ const {camera,controls}=setup();const start=camera.position.clone();controls.autoRotate=true;controls.autoRotateSpeed=.55;
+ controls.update(.14);camera.updateMatrixWorld(true);
+ assert.ok(camera.position.distanceTo(start)>.001);assert.ok(Math.abs(camera.position.length()-4)<1e-6);assert.equal(controls.target.length(),0);controls.dispose();
+});
 test('unprojected line vertices return to their source image and stay fixed as camera moves',()=>{
  const {camera,controls}=setup();const point=unprojectDepth(240,200,3,800,600,camera),fixed=point.clone();
  const screen=point.clone().project(camera);assert.ok(Math.abs(screen.x-((240.5/800)*2-1))<1e-6);assert.ok(Math.abs(screen.y-((200.5/600)*2-1))<1e-6);
