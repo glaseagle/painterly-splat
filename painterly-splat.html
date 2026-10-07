@@ -75,6 +75,13 @@
     .loading-message[hidden] { display: none; }
 
     #canvas-wrap.is-dragging canvas { cursor: grabbing; }
+    #canvas-wrap.placing-cursor canvas { cursor: crosshair; }
+    .cursor-controls { margin-bottom: 14px; font-size: .7rem; }
+    .cursor-controls button { color: var(--ink); background: transparent; border: 1px solid var(--line); padding: 8px; cursor: pointer; }
+    .cursor-controls button[aria-pressed="true"] { background: var(--accent); color: #111; }
+    .cursor-controls label { margin-left: 8px; }
+    .cursor-controls p, #line-status { color: var(--muted); font-size: .62rem; line-height: 1.5; }
+
 
     .grain {
       position: absolute;
@@ -193,6 +200,8 @@
 
     .scene-row { margin-bottom: 8px; }
     .mode-row { margin-bottom: 14px; }
+    .mode-row[aria-label="Render mode"] { grid-template-columns: repeat(4,1fr); }
+    .mode-row[aria-label="Camera mode"] { grid-template-columns: repeat(2,1fr); }
 
     .scene-row button,
     .mode-row button {
@@ -387,14 +396,14 @@
 </head>
 <body>
   <main class="stage">
-    <div id="canvas-wrap" tabindex="0" aria-label="Scan viewer. Touch: one finger orbits, two fingers pan, pinch to zoom. Mouse: drag to look, WASD to move, R and F to rise or descend."></div>
+    <div id="canvas-wrap" tabindex="0" aria-label="Scan viewer. Touch: one finger orbits, two fingers pan, pinch to zoom. Mouse: drag to orbit, right-drag to pan, wheel to zoom. Double-click a surface to place the 3D cursor."></div>
 
     <div class="grain" aria-hidden="true"></div>
 
     <header class="topbar">
       <div class="identity">
         <h1>Painterly Splat</h1>
-        <p>Step inside the scan. Drag to look, WASD to move. Compare full Gaussian splats with marks chosen for your viewpoint.</p>
+        <p>Orbit the scan. Place the 3D cursor on a surface. Turn Gaussian shapes and image edges into brush strokes.</p>
       </div>
       <a class="back" href="https://michael.software/experiments">Experiments</a>
       <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Open options" aria-controls="render-controls" aria-expanded="false"><span></span><span></span></button>
@@ -435,10 +444,21 @@
         </details>
       </div>
 
+      <div class="mode-row" role="group" aria-label="Camera mode">
+        <button type="button" data-camera="orbit" class="is-active" aria-pressed="true">Orbit</button>
+        <button type="button" data-camera="fly" aria-pressed="false">Fly</button>
+      </div>
+      <div class="cursor-controls">
+        <button type="button" id="place-cursor" aria-pressed="false">Place 3D cursor</button>
+        <label><input type="checkbox" id="show-cursor" checked /> Show cursor</label>
+        <p id="cursor-status">Double-click a surface to change the orbit pivot.</p>
+        <p id="navigation-help">Drag to orbit · Right-drag to pan · Wheel to zoom</p>
+      </div>
       <div class="mode-row" role="group" aria-label="Render mode">
         <button type="button" data-mode="splat" aria-pressed="false">Splats</button>
         <button type="button" data-mode="hybrid" aria-pressed="false">Hybrid</button>
         <button type="button" data-mode="brush" class="is-active" aria-pressed="true">Brush</button>
+        <button type="button" data-mode="lines" aria-pressed="false">Lines</button>
       </div>
 
       <div class="control">
@@ -458,16 +478,21 @@
         <output for="stroke-density">100</output>
       </div>
       <div class="control">
-        <label for="guidance">Contour flow</label>
-        <input id="guidance" type="range" min="0" max="100" value="75" title="Follow contours and concentrate fine strokes around detail. Set to 0 for the original brush rendering." />
-        <output for="guidance">75</output>
+        <label for="line-amount">Line art</label>
+        <input id="line-amount" type="range" min="0" max="100" value="75" title="Brush strokes traced from edges of the unpainted splats. Zero turns line art off." />
+        <output for="line-amount">75</output>
       </div>
-
       <div class="control">
-        <label for="ribbons">Curved strokes</label>
-        <input id="ribbons" type="range" min="0" max="100" value="65" title="Grow longer textured strokes along contours, stopping at depth and color boundaries. Requires Contour flow." />
-        <output for="ribbons">65</output>
+        <label for="edge-detail">Edge detail</label>
+        <input id="edge-detail" type="range" min="0" max="100" value="65" title="Higher values capture fainter edges and finer details." />
+        <output for="edge-detail">65</output>
       </div>
+      <div class="control">
+        <label for="line-width">Line width</label>
+        <input id="line-width" type="range" min="0" max="100" value="30" />
+        <output for="line-width">30</output>
+      </div>
+      <p id="line-status" role="status">Line art updates after the camera stops.</p>
 
       <div class="brush-options" id="brush-options">
         <label for="brush-set">Drawing tools · <span id="brush-count">18 selected</span></label>
@@ -487,7 +512,7 @@
     </aside>
 
     <div class="mobile-hint">1 finger orbit · 2 fingers pan · Pinch zoom</div>
-    <div class="axis" aria-hidden="true"><b>Drag</b> look · <b>WASD</b> move<br><b>R / F</b> rise / descend · <b>Wheel</b> move<br><a href="https://github.com/mkkellogg/GaussianSplats3D" target="_blank" rel="noopener">GaussianSplats3D</a> + <a href="https://github.com/mrdoob/three.js" target="_blank" rel="noopener">Three.js</a></div>
+    <div class="axis" aria-hidden="true"><span id="desktop-navigation">Drag to orbit · Right-drag to pan · Wheel to zoom</span><br><b>Double-click</b> set pivot<br><a href="https://github.com/mkkellogg/GaussianSplats3D" target="_blank" rel="noopener">GaussianSplats3D</a> + <a href="https://github.com/mrdoob/three.js" target="_blank" rel="noopener">Three.js</a></div>
     <div class="loading-message" id="loading-message" role="status">Loading full scan…</div>
     <div class="error" id="error" role="alert">This study needs WebGL2. Try opening it in a current version of Chrome, Safari, Edge, or Firefox.</div>
   </main>
@@ -512,6 +537,6 @@
 
   <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
   <script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/brush.js"></script>
-  <script type="module" src="painterly-viewer.js?v=brushes-2"></script>
+  <script type="module" src="painterly-viewer.js?v=lineart-1"></script>
 </body>
 </html>

@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { brushFamilies, brushMatchGLSL, BRUSH_VARIANTS, strokeSizingGLSL } from './painterly-brush-matching.js?v=brushes-2';
-import { ribbonVaryings, ribbonTraceGLSL, ribbonFragmentGLSL } from './painterly-ribbons.js?v=ribbons-1';
 
 const VARIANTS = BRUSH_VARIANTS, TILE = 128;
 let atlasPromise;
@@ -103,20 +102,10 @@ export function installBrushMaterial(viewer, texture, mode, size) {
   material.uniforms.sizeVariation = { value: .85 };
   material.uniforms.strokeDensity = { value: 1 };
   material.uniforms.brushEnabled = { value: brushFamilies.map(() => 1) };
-  material.uniforms.guideMap = { value: null };
-  material.uniforms.guideStrength = { value: 0 };
-  material.uniforms.guideReference = { value: null };
-  material.uniforms.guideColor = { value: null };
-  material.uniforms.ribbonViewport = { value: new THREE.Vector2(1, 1) };
-  material.uniforms.ribbonStrength = { value: 0.65 };
   const declarations = 'uniform float brushMix;\nuniform float markSize;\nuniform float sizeVariation;\nuniform float strokeDensity;\nvarying vec4 vBrush;\nvarying float vBrushStrength;\n';
-  material.vertexShader = declarations + ribbonVaryings + ribbonTraceGLSL + 'uniform float guideStrength;\nuniform float ribbonStrength;\n' + brushMatchGLSL() + strokeSizingGLSL + '\n' + material.vertexShader.replace(basisLine, `
+  material.vertexShader = declarations + brushMatchGLSL() + strokeSizingGLSL + '\n' + material.vertexShader.replace(basisLine, `
     float major = length(basisVector1);
     float minor = length(basisVector2);
-    vec4 guide = vec4(0.5, 0.5, 0.0, 0.0);
-    if (guideStrength > 0.0 && brushMix > 0.0) {
-      guide = texture2D(guideMap, clamp(ndcCenter.xy * 0.5 + 0.5, 0.0, 1.0));
-    }
     float luma = dot(vColor.rgb, vec3(0.299, 0.587, 0.114));
     // Independent integer hashes keep scale, sampling and tool choice uncorrelated.
     uint h = splatIndex * 1664525u + 1013904223u;
@@ -128,66 +117,20 @@ export function installBrushMaterial(viewer, texture, mode, size) {
     float variant = float((h >> 16u) & 7u);
     float family = matchBrush(major / max(minor, 0.05), minor, vColor.a, luma, matchSeed);
     vBrushStrength = brushStrength(family);
-    vec2 sized = strokeSize(major, minor, markSize, sizeVariation, sizeSeed, guide.a*guideStrength);
+    vec2 sized = strokeSize(major, minor, markSize, sizeVariation, sizeSeed, 0.0);
     float strokeMajor = sized.x, strokeMinor = sized.y;
-    float steering = guide.b * guideStrength;
-    strokeMinor = mix(strokeMinor, min(strokeMinor, strokeMajor / 3.4), steering);
     float keep = clamp(strokeDensity * (major * minor) / max(1.0, strokeMajor * strokeMinor), 0.001, 1.0);
     // Enlarge a stable, area-weighted set of marks so individual strokes read at
     // screen scale. Other Gaussians remain as a translucent watercolor ground.
     float fade = max(0.002, keep * 0.18);
-    float selected = mix(step(seed, keep), smoothstep(seed-fade, seed+fade, keep), guideStrength);
+    float selected = smoothstep(seed-fade, seed+fade, keep);
     float enlarge = brushMix * selected;
-    vec2 originalDirection = basisVector1 / max(major, 0.0001);
-    vec2 doubled = guide.rg * 2.0 - 1.0;
-    float angle = length(doubled) > 0.001 ? 0.5 * atan(doubled.y, doubled.x) : 0.0;
-    vec2 direction = vec2(cos(angle), sin(angle));
-    if (dot(direction, originalDirection) < 0.0) direction = -direction;
-    direction = normalize(mix(originalDirection, direction, steering));
-    // Only selected pigment marks turn; the other splats retain their original ground.
+    vec2 direction = basisVector1 / max(major, 0.0001);
     basisVector1 = mix(basisVector1, direction * strokeMajor, enlarge);
     basisVector2 = mix(basisVector2, vec2(direction.y, -direction.x) * strokeMinor, enlarge);
     vBrush = vec4(family, variant, selected, seed);
-    ribbonLeft = vec4(0.0); ribbonRight = vec4(0.0); ribbonEnds = vec4(0.0);
-    ribbonAnchor = ndcCenter.xy * 0.5 + 0.5;
-    ribbonInfo = vec4(0.0);
-    ribbonPixel = vPosition.x * basisVector1 + vPosition.y * basisVector2;
-    // A stable quarter of candidate marks can become ribbons. Never use sort order.
-    float ribbonSeed = float((h >> 20u) & 1023u) / 1023.0;
-    float ribbonAmount = selected * guideStrength * ribbonStrength * smoothstep(0.25, 0.75, guide.b);
-    if (brushMix > 0.0 && ribbonAmount > 0.01 && ribbonSeed < 0.25) {
-      vec4 source = ribbonReference(ribbonAnchor);
-      vec3 sourceColor = ribbonColor(ribbonAnchor);
-      float anchorDepth = log2(1.0 + max(0.0, -viewCenter.z)) / 16.0;
-      // A hidden Gaussian cannot borrow a contour from the foreground.
-      ribbonAmount *= (1.0-smoothstep(0.002, 0.006, abs(source.g-anchorDepth))) * smoothstep(0.25, 0.6, source.a);
-      if (ribbonAmount > 0.01) {
-        float stride = clamp(strokeMajor * 0.65, 4.0, 22.0);
-        vec2 forward = direction, backward = -direction;
-        bool frontAlive = true, backAlive = true;
-        ribbonRight.xy = advanceRibbon(ribbonAnchor, vec2(0.0), forward, stride, source, sourceColor, frontAlive);
-        ribbonRight.zw = advanceRibbon(ribbonAnchor, ribbonRight.xy, forward, stride, source, sourceColor, frontAlive);
-        ribbonEnds.zw = advanceRibbon(ribbonAnchor, ribbonRight.zw, forward, stride, source, sourceColor, frontAlive);
-        ribbonLeft.xy = advanceRibbon(ribbonAnchor, vec2(0.0), backward, stride, source, sourceColor, backAlive);
-        ribbonLeft.zw = advanceRibbon(ribbonAnchor, ribbonLeft.xy, backward, stride, source, sourceColor, backAlive);
-        ribbonEnds.xy = advanceRibbon(ribbonAnchor, ribbonLeft.zw, backward, stride, source, sourceColor, backAlive);
-        float halfWidth = clamp(strokeMinor * 0.55, 1.25, 8.0);
-        // Keep the original mark inside the quad while blending in the curved path.
-        vec2 extent = abs(basisVector1) + abs(basisVector2);
-        vec2 lo = -extent, hi = extent;
-        lo = min(lo, min(min(ribbonLeft.xy, ribbonLeft.zw), ribbonEnds.xy)-halfWidth);
-        lo = min(lo, min(min(ribbonRight.xy, ribbonRight.zw), ribbonEnds.zw)-halfWidth);
-        hi = max(hi, max(max(ribbonLeft.xy, ribbonLeft.zw), ribbonEnds.xy)+halfWidth);
-        hi = max(hi, max(max(ribbonRight.xy, ribbonRight.zw), ribbonEnds.zw)+halfWidth);
-        ribbonPixel = mix(lo, hi, vPosition*0.5+0.5);
-        float determinant = basisVector1.x*basisVector2.y-basisVector1.y*basisVector2.x;
-        vPosition = vec2(ribbonPixel.x*basisVector2.y-ribbonPixel.y*basisVector2.x,
-                         basisVector1.x*ribbonPixel.y-basisVector1.y*ribbonPixel.x) / determinant;
-        ribbonInfo = vec4(ribbonAmount, halfWidth, source.g, 1.0);
-      }
-    }
-    vec2 ndcOffset = ribbonPixel *`);
-  material.fragmentShader = declarations + ribbonVaryings + ribbonFragmentGLSL + 'uniform sampler2D pigmentMap;\n' + material.fragmentShader
+    vec2 ndcOffset = vec2(vPosition.x * basisVector1 + vPosition.y * basisVector2) *`);
+  material.fragmentShader = declarations + 'uniform sampler2D pigmentMap;\n' + material.fragmentShader
     .replace('if (A > 8.0) discard;', 'if (A > 8.0 && brushMix < 0.01) discard;')
     .replace(alphaLine, `
       float gaussian = exp(-0.5 * A);
@@ -198,20 +141,6 @@ export function installBrushMaterial(viewer, texture, mode, size) {
         float pigment = texture2D(pigmentMap, atlasUV).a;
         float edge = smoothstep(0.0, 0.025, min(min(uv.x, uv.y), min(1.0-uv.x, 1.0-uv.y)));
         float stroke = pow(pigment, 0.65) * edge;
-        if (ribbonInfo.w > 0.5) {
-          if (any(greaterThan(abs(vPosition), vec2(2.828427)))) stroke = 0.0;
-          vec3 path = ribbonCoordinates(ribbonPixel);
-          float taper = mix(0.25, 1.0, pow(max(0.0, sin(path.x*3.141593)), 0.45));
-          float width = ribbonInfo.y * taper;
-          float coverage = 1.0-smoothstep(max(0.0, width-0.8), width+0.5, path.y);
-          vec2 ribbonUV = vec2(clamp(path.x, 0.002, 0.998), clamp(0.5+path.y/max(2.0*width, 0.001), 0.002, 0.998));
-          float ribbonPigment = texture2D(pigmentMap, (vec2(vBrush.y,vBrush.x)+ribbonUV)/vec2(${VARIANTS.toFixed(1)},${brushFamilies.length.toFixed(1)})).a;
-          vec4 surface = texture2D(guideReference, ribbonAnchor + ribbonPixel / ribbonViewport);
-          float depth = surface.g/max(surface.a,0.001);
-          float visibility = (1.0-smoothstep(0.002,0.006,ribbonInfo.z-depth))*smoothstep(0.1,0.4,surface.a);
-          float curved = pow(ribbonPigment, 0.65)*coverage*visibility*step(2.0,path.z);
-          stroke = mix(stroke, curved, ribbonInfo.x);
-        }
         // Fine lines are decisive; broad pigment stays translucent.
         float strength = vBrushStrength;
         float painted = mix(gaussian * 0.20, stroke * strength, vBrush.z) * vColor.a;

@@ -2,20 +2,21 @@
 
 Real Gaussian scans rendered as view-dependent p5.brush strokes.
 
-**[Open the live demo](https://michael.software/painterly-splat?v=fit-3)**
+**[Open the live demo](https://michael.software/painterly-splat?v=lineart-1)**
 
-The train opens in Brush mode. Switch between Train, Bike, and Table, compare
-Splats / Hybrid / Brush, and adjust stroke size. The default size is the former
-maximum, now at the middle of an expanded slider.
+The train opens in Brush mode. Compare Splats / Hybrid / Brush / Lines, choose
+from 18 brush families, and adjust stroke size, variation, density, and line art.
 
-**Contour flow** steers pigment along image contours and places smaller, denser
-marks around detail, with broader washes in quiet regions. It starts at 75%; set
-it to 0 to compare the original brush rendering. Splats mode bypasses guidance.
+Drag to orbit the visible surface. Double-click a surface, or use **Place 3D cursor**
+and click/tap, to set the orbit pivot. Right-drag pans; wheel/pinch zooms. The cursor
+is a world-space marker with three axes and rings. Hide it with **Show cursor**.
+**Fly** retains the original free camera; **Reset view** restores the capture view.
 
-**Curved strokes** grow the selected marks into longer textured ribbons that
-follow the same contour field, stopping at detected depth and color boundaries to
-reduce paint crossing object edges. It starts at 65% and requires Contour flow
-above 0; set it to 0 to keep individual marks.
+**Line art** replaces the former Contour flow and Curved strokes controls. A Canny
+pass detects edges in the unpainted splats, traces connected paths, samples scene
+depth, and converts the paths into 3D brush-textured strokes. **Edge detail** adjusts
+detection sensitivity; **Line width** adjusts ink width. **Lines** isolates the
+linework on paper. Set Line art to 0 to see the brush rendering without outlines.
 
 **Open splat file** loads your own `.ply`, `.splat`, or `.ksplat` (up to 256 MB).
 Files stay in the browser and are never uploaded to a server. The bundled scenes
@@ -58,32 +59,31 @@ the renderer and three full scan assets are included in the repo (about 42 MB of
 
 ## Controls
 
-- Desktop: drag to look, WASD to move, R/F to rise or descend, wheel to move.
+- Orbit (default): drag to orbit, right-drag to pan, wheel to zoom; double-click to set the pivot.
+- Fly: drag to look, WASD to move, R/F to rise or descend, wheel to move.
 - Touch: one finger to orbit, two fingers to pan, pinch to zoom.
 - On mobile, open the hamburger menu for scans, render modes, stroke size, and Reset view.
 
 ## How it works
 
-p5.brush creates 24 seeded marks across watercolor, charcoal, marker, dry brush,
-pencil, and ink. A GPU matcher chooses a family from each Gaussian's projected
-shape, width, opacity, and luminance. Camera movement changes the match; the
-marks stay stable at rest. Larger marks sit over a translucent Gaussian ground.
+p5.brush creates 144 seeded marks across 18 families. A GPU matcher chooses a
+family from each Gaussian's projected shape, width, opacity, and luminance.
+Independent stable size variation gives uniform SHARP footprints broad and fine
+marks while retaining native Gaussian elongation and size hierarchy.
 
-A half-resolution reference pass captures luminance, approximate blended depth,
-and coverage. Two small GPU passes derive a depth-aware structure tensor and a
-contour direction/detail map. Selected marks follow confident contours; weak
-directions retain the Gaussian orientation. Stable IDs and soft selection reduce
-density popping. The guide is capped at 640 pixels on its longest side and only
-runs when a painted frame is requested. It adds one scan draw and two fullscreen
-passes; guidance at 0 and Splats mode skip all three. Selected marks can grow
-into longer curved ribbons that trace the contour field in screen space, anchored
-to stable Gaussian IDs and stopping at depth and color boundaries. Temporal
-history is not yet reprojected, so view-dependent brush-family changes can still
-occur in motion.
+The lineart pass captures the original splat color and the nearest covered
+Gaussian-center depth, capped at 640 pixels on the longest side. Gaussian blur,
+Sobel gradients, non-maximum suppression, and hysteresis produce thin Canny edges.
+Connected paths stop at depth discontinuities; their vertices are unprojected into
+world space and rendered as joined, tapered brush strips. A current-view depth
+pass hides strokes behind nearer surfaces. Lines remain in 3D during motion and
+are regenerated after the camera stops and splat sorting completes. This is
+view-dependent linework using approximate splat-center depth, not a reconstructed
+surface mesh or permanent all-view drawing.
 
 GaussianSplats3D handles projection, blending, visibility, and worker-based depth
-sorting. The viewer retains the source capture orientation and full scan density.
-Touch gestures use Three.js OrbitControls; desktop movement uses FlyControls.
+sorting. Three.js OrbitControls handles orbit/pan/zoom, while FlyControls supports
+the optional free camera. Source capture orientation and full scan density remain.
 
 | File | Purpose |
 | --- | --- |
@@ -91,8 +91,9 @@ Touch gestures use Three.js OrbitControls; desktop movement uses FlyControls.
 | `painterly-viewer.js` | Scene loading, camera, input, render loop |
 | `painterly-brushes.js` | Procedural mark atlas and shader integration |
 | `painterly-brush-matching.js` | Brush descriptors and GPU matching code |
-| `painterly-guidance.js` | Luminance/depth reference, contour and detail analysis |
-| `painterly-ribbons.js` | Curved-stroke ribbon tracing and textured fragment coordinates |
+| `painterly-edges.js` | Canny edge detection, depth decoding, connected paths |
+| `painterly-lineart.js` | Base/depth capture, world-space brush strips, occlusion and picking |
+| `painterly-navigation.js` | Orbit camera, 3D cursor, depth unprojection |
 | `painterly-touch.js` | Touch-only OrbitControls integration |
 | `painterly-upload.js` | Local file validation, SHARP camera metadata, automatic framing |
 | `painterly-camera.js` | Webcam/photo preview, generation, progress, download |
@@ -125,11 +126,10 @@ from the private queue and sends results back; no public PC port is open. The
 optional all-cloud route needs a paid Container. Generation availability is
 reported explicitly by the backend; local splat uploads always stay on device.
 
-With the static server running, open `tests/guidance-browser.html` for GPU
-regressions (both half-float targets and the byte fallback). These exercise actual
-shaders on flat regions, vertical/horizontal/diagonal edges, depth boundaries,
-empty coverage, deterministic redraws, and resizing. Ribbon fixtures exercise
-curvature, depth/color/coverage stops, viewport clipping, and deterministic paths.
+With the static server running, open `tests/render-browser.html` for actual GPU
+matching, scale, renderer-state preservation, visible line geometry, cursor depth,
+and foreground occlusion checks. Node tests also cover Canny edge thinning,
+hysteresis, depth-separated tracing, world-space projection, and orbit/pan behavior.
 
 ## Credits
 
@@ -154,8 +154,8 @@ and drawing presets can be narrowed by toggling individual swatches.
 Matching uses each Gaussian's projected aspect, width, opacity, and luminance.
 Only similarly scoring tools can alternate; disabled tools are excluded. Size
 variation uses an independent stable hash from mark selection, retains the
-original size hierarchy and elongation, and makes finer marks around detail.
+original size hierarchy and elongation.
 Stroke size, size variation, and stroke density can be adjusted independently.
 
-Validation: `node --test tests/*.test.mjs`; open `tests/guidance-browser.html`
-for actual WebGL matching, scale, contour, and ribbon regressions.
+Validation: `node --test tests/*.test.mjs`; open `tests/render-browser.html`
+for actual WebGL matching, scale, line visibility, depth picking, and occlusion checks.

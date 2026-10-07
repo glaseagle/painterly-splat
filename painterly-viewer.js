@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { brushFamilies } from './painterly-brush-matching.js?v=brushes-2';
-import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=brushes-2';
-import { createPainterlyGuidance } from './painterly-guidance.js?v=ribbons-1';
+import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=lineart-1';
+import { createLineArt } from './painterly-lineart.js?v=lineart-1';
+import { createOrbitCamera, createCursor } from './painterly-navigation.js?v=lineart-1';
 import { prepareLocalSplat, normalizeImport, framedImportCamera } from './painterly-upload.js?v=fit-3';
 import { installCamera } from './painterly-camera.js?v=local-3';
 import { FlyControls } from './vendor/three/FlyControls.js';
@@ -16,7 +17,10 @@ const count = document.querySelector('#scene-count');
 const source = document.querySelector('#scene-source');
 const note = document.querySelector('#view-note');
 const density = document.querySelector('#density');
-const guidance = document.querySelector('#guidance');
+const lineAmount = document.querySelector('#line-amount');
+const edgeDetail = document.querySelector('#edge-detail');
+const lineWidth = document.querySelector('#line-width');
+const lineStatus = document.querySelector('#line-status');
 const variation = document.querySelector('#variation');
 const strokeDensity = document.querySelector('#stroke-density');
 const brushSet = document.querySelector('#brush-set');
@@ -25,6 +29,7 @@ function updateBrushSelection() {
   document.querySelectorAll('[data-brush]').forEach(button => button.setAttribute('aria-pressed',String(Boolean(enabledBrushes[Number(button.dataset.brush)]))));
   document.querySelector('#brush-count').textContent = `${enabledBrushes.filter(Boolean).length} selected`;
   if (ready) viewer.splatMesh.material.uniforms.brushEnabled.value = [...enabledBrushes];
+  lineArt?.rematch(enabledBrushes);
   viewer?.forceRenderNextFrame();
 }
 brushSet.addEventListener('change', () => {
@@ -39,7 +44,6 @@ document.querySelector('#brush-palette').addEventListener('click', event => {
   enabledBrushes[index] = 1-enabledBrushes[index]; brushSet.value = 'custom';
   updateBrushSelection();
 });
-const ribbons = document.querySelector('#ribbons');
 const openSplat = document.querySelector('#open-splat');
 const splatFile = document.querySelector('#splat-file');
 const uploadStatus = document.querySelector('#upload-status');
@@ -48,7 +52,56 @@ let manifest, viewer, camera, renderer, controls, touchControls, scene, mode = '
 let ready = false, lastTick = performance.now();
 let drag = null, loadingScene = false;
 let sortPending = false, lastSort = 0;
-let painterlyGuidance;
+let lineArt, orbitControls, cursor, cursorScene;
+let navMode = 'orbit', placingCursor = false, pivotPending = true;
+let viewDirty = true, lineDirty = true, lastNavigation = 0, lineRevision = 0;
+
+function configureNavigation() {
+  orbitControls?.dispose(); orbitControls = null;
+  touchControls?.dispose(); touchControls = null;
+  if (!camera || !cursor) return;
+  if (navMode === 'orbit') {
+    orbitControls = createOrbitCamera(camera, wrap, cursor.root.position, () => {
+      cursor.root.position.copy(orbitControls.target); changed();
+    });
+    orbitControls.enabled = ready && !placingCursor;
+  } else {
+    touchControls = makeTouchControls(); touchControls.enabled = ready && !placingCursor;
+  }
+  if (controls) controls.enabled = ready && navMode === 'fly' && !placingCursor;
+  document.querySelectorAll('[data-camera]').forEach(button => {
+    const active = button.dataset.camera === navMode;
+    button.classList.toggle('is-active',active);button.setAttribute('aria-pressed',String(active));
+  });
+  wrap.dataset.cameraMode = navMode;
+  document.querySelector('#navigation-help').textContent = navMode === 'orbit' ? 'Drag to orbit · Right-drag to pan · Wheel to zoom' : 'Drag to look · WASD to move · R/F up/down';
+  wrap.setAttribute('aria-label', `Scan viewer. Touch: one finger orbits, two fingers pan, pinch to zoom. ${document.querySelector('#navigation-help').textContent}. Double-click a surface to place the 3D cursor.`);
+  document.querySelector('#desktop-navigation').textContent = document.querySelector('#navigation-help').textContent;
+  viewer?.forceRenderNextFrame();
+}
+function placeCursor(event) {
+  if (!ready || !lineArt) return;
+  const box=wrap.getBoundingClientRect();
+  if(viewDirty) {lineArt.captureDepth(camera,wrap.clientWidth,wrap.clientHeight);viewDirty=false;}
+  const point=lineArt.pick((event.clientX-box.left)/box.width,1-(event.clientY-box.top)/box.height);
+  if (!point) {document.querySelector('#cursor-status').textContent='No surface here. Choose a visible part of the scan.';return;}
+  cursor.root.position.copy(point);placingCursor=false;navMode='orbit';pivotPending=false;
+  document.querySelector('#place-cursor').setAttribute('aria-pressed','false');wrap.classList.remove('placing-cursor');
+  document.querySelector('#cursor-status').textContent='Cursor placed · orbiting this surface';
+  configureNavigation();changed();
+}
+document.querySelector('#place-cursor').addEventListener('click',()=>{
+  placingCursor=!placingCursor;document.querySelector('#place-cursor').setAttribute('aria-pressed',String(placingCursor));
+  wrap.classList.toggle('placing-cursor',placingCursor);configureNavigation();
+  document.querySelector('#cursor-status').textContent=placingCursor?'Click or tap a surface to place the cursor.':'Double-click a surface to change the orbit pivot.';
+  if(placingCursor && mobile.matches)setMenu(false);
+});
+document.querySelector('#show-cursor').addEventListener('change',()=>viewer?.forceRenderNextFrame());
+document.querySelectorAll('[data-camera]').forEach(button=>button.addEventListener('click',()=>{
+  if(!ready)return;clearMovement();navMode=button.dataset.camera;configureNavigation();
+}));
+wrap.addEventListener('dblclick',placeCursor);
+wrap.addEventListener('click',event=>{if(placingCursor)placeCursor(event);});
 const basis = new THREE.Matrix4();
 const yawRotation = new THREE.Quaternion();
 const pitchRotation = new THREE.Quaternion();
@@ -65,6 +118,10 @@ function makeTouchControls() {
 // The renderer owns covariance projection, blending, visibility, and worker sorting.
 // Capture cameras are transformed into the trained model's coordinate system offline.
 function resetCamera() {
+  placingCursor=false;
+  document.querySelector('#place-cursor').setAttribute('aria-pressed','false');
+  wrap.classList.remove('placing-cursor');
+  document.querySelector('#cursor-status').textContent='Double-click a surface to change the orbit pivot.';
   const c = scene.captureCamera;
   const R = c.rotation;
   camera.position.fromArray(c.position);
@@ -77,7 +134,11 @@ function resetCamera() {
   camera.up.copy(worldUp);
   camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(c.height / (2 * c.fy)));
   resize();
-  if (touchControls) { touchControls.dispose(); touchControls = makeTouchControls(); }
+  if(cursor){
+    camera.getWorldDirection(cursor.root.position);
+    cursor.root.position.multiplyScalar(scene.viewDistance || Math.max(.5,camera.position.length())).add(camera.position);
+    pivotPending=true;configureNavigation();
+  }
   changed();
 }
 
@@ -89,15 +150,16 @@ function resize() {
   const c = scene.captureCamera;
   camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.max(c.height / (2 * c.fy), c.width / (2 * c.fx * camera.aspect))));
   camera.updateProjectionMatrix();
-  viewer?.forceRenderNextFrame();
+  changed();
 }
 
 function changed() {
   if (!camera) return;
   camera.updateMatrixWorld(true);
-  sortPending = true;
+  sortPending = true;viewDirty=true;lineDirty=true;lastNavigation=performance.now();
   wrap.dataset.cameraPosition = camera.position.toArray().map(v => v.toFixed(5)).join(',');
   wrap.dataset.cameraRotation = camera.quaternion.toArray().map(v => v.toFixed(5)).join(',');
+  if(cursor)wrap.dataset.cursorPosition=cursor.root.position.toArray().map(v=>v.toFixed(5)).join(',');
   viewer?.forceRenderNextFrame();
 }
 
@@ -107,10 +169,7 @@ function clearMovement() {
   // FlyControls has no public reset method. Reconnecting releases all held input state.
   controls.dispose();
   controls = makeControls();
-  controls.enabled = ready;
-  touchControls?.dispose();
-  touchControls = makeTouchControls();
-  touchControls.enabled = ready;
+  configureNavigation();
   drag = null;
 }
 
@@ -127,7 +186,7 @@ function makeControls() {
   wrap.removeEventListener('pointercancel', fly._onPointerCancel);
   window.removeEventListener('keydown', fly._onKeyDown);
   const keyDown = e => {
-    if (document.activeElement !== wrap || !ready || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (document.activeElement !== wrap || !ready || navMode !== 'fly' || placingCursor || e.ctrlKey || e.metaKey || e.altKey) return;
     if (!['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyR', 'KeyF', 'KeyQ', 'KeyE', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) return;
     e.preventDefault();
     fly._onKeyDown(e);
@@ -152,7 +211,9 @@ async function loadScene(id, local = null) {
   try {
     controls?.dispose(); controls = null;
     touchControls?.dispose(); touchControls = null;
-    painterlyGuidance?.dispose(); painterlyGuidance = null;
+    orbitControls?.dispose();orbitControls=null;
+    lineArt?.dispose();lineArt=null;
+    cursor?.dispose();cursor=null;cursorScene=null;
     if (viewer) await viewer.dispose();
     scene = local || manifest.scenes.find(s => s.id === id);
     if (!renderer) {
@@ -160,7 +221,8 @@ async function loadScene(id, local = null) {
       renderer.setPixelRatio(1);
       wrap.append(renderer.domElement);
     }
-    renderer.setClearColor(mode === 'brush' ? 0xf3eddd : 0x0b0b0a, 1);
+    renderer.setClearColor(mode === 'brush' || mode === 'lines' ? 0xf3eddd : 0x0b0b0a, 1);
+    cursor=createCursor();cursorScene=new THREE.Scene();cursorScene.add(cursor.root);
     camera = new THREE.PerspectiveCamera(50, wrap.clientWidth / wrap.clientHeight, .01, 2000);
     viewer = new Viewer({
       rootElement: wrap, camera, renderer, useBuiltInControls: false,
@@ -186,18 +248,12 @@ async function loadScene(id, local = null) {
         loading.textContent = Number.isFinite(percent) ? `Loading full scan · ${Math.round(percent)}%` : 'Preparing full scan…';
       }
     });
-    painterlyGuidance = createPainterlyGuidance(renderer, viewer.splatMesh);
+    lineArt = createLineArt(renderer, viewer.splatMesh, brushTexture);
     installBrushMaterial(viewer, brushTexture, mode, Number(density.value) / 100);
-    viewer.splatMesh.material.uniforms.guideMap.value = painterlyGuidance.texture;
-    viewer.splatMesh.material.uniforms.guideReference.value = painterlyGuidance.reference;
-    viewer.splatMesh.material.uniforms.guideColor.value = painterlyGuidance.color;
-    viewer.splatMesh.material.uniforms.ribbonStrength.value = Number(ribbons.value) / 100;
-    viewer.splatMesh.material.uniforms.guideStrength.value = Number(guidance.value) / 100;
     viewer.splatMesh.material.uniforms.sizeVariation.value = Number(variation.value)/100;
     viewer.splatMesh.material.uniforms.strokeDensity.value = Number(strokeDensity.value)/100;
-    ready = true; controls.enabled = true;
+    ready = true;configureNavigation();
     updateBrushSelection();
-    touchControls = makeTouchControls();
     sceneButtons.forEach(b => {
       const active = b.dataset.scene === id;
       b.classList.toggle('is-active', active);
@@ -234,9 +290,7 @@ async function loadScene(id, local = null) {
 let brushTexture, modeRequest = 0;
 
 function updateViewNote() {
-  note.textContent = mode === 'splat' ? 'Full scan · fly camera'
-    : Number(guidance.value) > 0 ? 'Contour-guided marks · still when you stop'
-    : 'Original brush marks · still when you stop';
+  note.textContent = mode === 'splat' ? 'Original Gaussian splats' : mode === 'lines' ? 'Edges from the base splats · strokes placed in 3D' : 'Gaussian brush marks + projected line art';
 }
 
 async function setMode(next) {
@@ -251,14 +305,13 @@ async function setMode(next) {
   document.querySelector('#brush-palette').hidden = mode === 'splat';
   document.querySelector('#brush-options').hidden = mode === 'splat';
   updateBrushSelection();
-  renderer?.setClearColor(mode === 'brush' ? 0xf3eddd : 0x0b0b0a, 1);
+  renderer?.setClearColor(mode === 'brush' || mode === 'lines' ? 0xf3eddd : 0x0b0b0a, 1);
   document.querySelectorAll('[data-mode]').forEach(b => {
     const active = b.dataset.mode === mode;
     b.classList.toggle('is-active', active); b.setAttribute('aria-pressed', String(active));
   });
-  density.disabled = variation.disabled = strokeDensity.disabled = mode === 'splat';
-  guidance.disabled = mode === 'splat';
-  ribbons.disabled = mode === 'splat' || Number(guidance.value) === 0;
+  density.disabled = variation.disabled = strokeDensity.disabled = mode === 'splat' || mode === 'lines';
+  lineAmount.disabled = edgeDetail.disabled = lineWidth.disabled = mode === 'splat';
   if (viewer?.splatMesh?.material?.uniforms.brushMix) {
     viewer.splatMesh.material.uniforms.brushMix.value = mode === 'brush' ? 1 : mode === 'hybrid' ? .65 : 0;
     viewer.splatMesh.material.uniforms.pigmentMap.value = brushTexture;
@@ -270,7 +323,7 @@ async function setMode(next) {
 wrap.addEventListener('pointerdown', e => {
   if (!ready) return;
   wrap.focus({ preventScroll: true });
-  if (e.pointerType === 'touch') return;
+  if (e.pointerType === 'touch' || navMode !== 'fly' || placingCursor) return;
   drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
   wrap.setPointerCapture(e.pointerId);
 });
@@ -291,7 +344,7 @@ function endDrag(e) {
 wrap.addEventListener('pointerup', endDrag);
 wrap.addEventListener('pointercancel', endDrag);
 wrap.addEventListener('wheel', e => {
-  if (!ready) return;
+  if (!ready || navMode !== 'fly' || placingCursor) return;
   e.preventDefault(); camera.translateZ(e.deltaY * controls.movementSpeed * .0015); changed();
 }, { passive: false });
 window.addEventListener('blur', clearMovement);
@@ -387,16 +440,9 @@ for (const [control, uniform] of [[variation, 'sizeVariation'], [strokeDensity, 
     viewer?.forceRenderNextFrame();
   });
 }
-guidance.addEventListener('input', () => {
-  document.querySelector('output[for="guidance"]').value = guidance.value;
-  if (ready) viewer.splatMesh.material.uniforms.guideStrength.value = Number(guidance.value) / 100;
-  updateViewNote();
-  ribbons.disabled = mode === 'splat' || Number(guidance.value) === 0;
-  viewer?.forceRenderNextFrame();
-});
-ribbons.addEventListener('input', () => {
-  document.querySelector('output[for="ribbons"]').value = ribbons.value;
-  if (ready) viewer.splatMesh.material.uniforms.ribbonStrength.value = Number(ribbons.value) / 100;
+for(const control of [lineAmount,edgeDetail,lineWidth])control.addEventListener('input',()=>{
+  document.querySelector(`output[for="${control.id}"]`).value=control.value;
+  if(control===edgeDetail||control===lineAmount)lineDirty=true;
   viewer?.forceRenderNextFrame();
 });
 mobile.addEventListener('change', () => setMenu(false));
@@ -406,7 +452,8 @@ installCamera({ openSplat: openLocalFile, setBrushMode: () => setMode('brush') }
 function tick(now) {
   const dt = Math.min(.05, (now - lastTick) / 1000); lastTick = now;
   if (ready && !document.hidden) {
-    controls.update(dt);
+    if(navMode==='fly'&&!placingCursor)controls.update(dt);
+    else if(!placingCursor)orbitControls?.update();
     camera.updateMatrixWorld(true);
     // These trained scenes use normalized units; refresh ordering for small moves
     // as well as the viewer's default one-unit translation threshold.
@@ -418,12 +465,25 @@ function tick(now) {
     viewer.update();
     // Instant reveal has no animation; don't keep rendering an invisible fade.
     viewer.splatMesh.visibleRegionChanging = false;
-    if (viewer.shouldRender()) {
-      if (mode !== 'splat' && Number(guidance.value) > 0) {
-        painterlyGuidance.render(camera, wrap.clientWidth, wrap.clientHeight);
+    const rebuild=mode!=='splat' && Number(lineAmount.value)>0 && lineDirty && now-lastNavigation>180 && !viewer.sortRunning && !sortPending;
+    if (viewer.shouldRender() || viewDirty || rebuild) {
+      if(viewDirty || !lineArt.hasDepth){lineArt.captureDepth(camera,wrap.clientWidth,wrap.clientHeight);viewDirty=false;}
+      if(pivotPending){
+        const target=lineArt.pick(.5,.5);
+        if(target)cursor.root.position.copy(target);
+        pivotPending=false;configureNavigation();
+        wrap.dataset.cursorPosition=cursor.root.position.toArray().map(v=>v.toFixed(5)).join(',');
       }
-      viewer.splatMesh.material.uniforms.ribbonViewport.value.set(wrap.clientWidth, wrap.clientHeight);
-      viewer.render();
+      if(rebuild){
+        lineArt.rebuild(camera,wrap.clientWidth,wrap.clientHeight,Number(edgeDetail.value)/100,enabledBrushes);
+        lineDirty=false;wrap.dataset.lineStrokes=String(lineArt.count);wrap.dataset.lineRevision=String(++lineRevision);
+        lineStatus.textContent=`${lineArt.count.toLocaleString()} strokes · projected into the scene`;
+      }
+      if(mode==='lines')renderer.clear();else viewer.render();
+      if(mode!=='splat')lineArt.render(camera,Number(lineAmount.value)/100,.5+Number(lineWidth.value)*.045);
+      cursor.root.visible=document.querySelector('#show-cursor').checked;
+      cursor.update(camera,wrap.clientHeight);
+      const auto=renderer.autoClear;renderer.autoClear=false;renderer.render(cursorScene,camera);renderer.autoClear=auto;
       wrap.dataset.frames = String(renderer.info.render.frame);
       wrap.dataset.renderedSplats = String(viewer.splatMesh.geometry.instanceCount);
     }
