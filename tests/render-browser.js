@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createLineArt } from '../painterly-lineart.js?v=lineart-1';
+import { createDepthOfField } from '../painterly-dof.js?v=dof-1';
 import { brushFamilies } from '../painterly-brush-matching.js?v=brushes-2';
 import { checkBrushes } from './brush-browser.js?v=brushes-2';
 
@@ -57,10 +58,21 @@ check('Canny paths produce visible brush-textured 3D geometry',()=>{
   assert(lines.count>2,`only ${lines.count} paths`);assert(ink()>100,'paths produced no visible ink');
 });
 check('zero line amount leaves the base image untouched',()=>assert(ink(0)===0,'disabled lines are visible'));
+const dof=createDepthOfField(renderer,lines.depthTexture);
+function dofTransition(focusDepth){
+  renderer.setRenderTarget(target);dof.begin(128,128);renderer.setClearColor(0xffffff,1);renderer.clear();renderer.render(mesh,camera);
+  dof.render({focusDepth,aperture:.8,blur:20});renderer.readRenderTargetPixels(target,0,0,128,128,pixels);renderer.setRenderTarget(null);
+  let transition=0;for(let x=30;x<98;x++){const value=pixels[(64*128+x)*4];if(value>40&&value<200)transition++;}
+  return transition;
+}
+check('depth of field preserves the cursor focus plane and blurs distant color edges',()=>{
+  const focused=dofTransition(3),defocused=dofTransition(1);
+  assert(defocused>focused+2,`transition width ${focused} -> ${defocused}`);
+});
 check('new foreground surface occludes the previously projected strokes',()=>{
   mesh.position.z=1;mesh.updateMatrixWorld(true);lines.captureDepth(camera,128,128);
   assert(ink()===0,'strokes show through a nearer surface');
 });
-lines.dispose();geometry.dispose();source.dispose();atlas.dispose();target.dispose();renderer.dispose();
+dof.dispose();lines.dispose();geometry.dispose();source.dispose();atlas.dispose();target.dispose();renderer.dispose();
 document.querySelector('#status').textContent=`${passed} passed · ${failed} failed`;
 document.body.dataset.result=failed?'fail':'pass';

@@ -104,6 +104,7 @@ export function createLineArt(renderer, mesh, atlas) {
   return {
     get count(){return lineCount;},
     get hasDepth(){return Boolean(snapshot);},
+    get depthTexture(){return depthTarget.texture;},
     captureDepth(camera,w,h){size(w,h);capture(camera,depthTarget,depth);snapshot=camera.clone();snapshot.matrixWorld.copy(camera.matrixWorld);depths=null;},
     rebuild(camera,w,h,detail,enabled){
       size(w,h);capture(camera,colorTarget,base);renderer.readRenderTargetPixels(colorTarget,0,0,width,height,colorBytes);

@@ -81,6 +81,9 @@
     .cursor-controls button[aria-pressed="true"] { background: var(--accent); color: #111; }
     .cursor-controls label { margin-left: 8px; }
     .cursor-controls p, #line-status { color: var(--muted); font-size: .62rem; line-height: 1.5; }
+    .dof-controls { margin: -5px 0 14px; padding: 10px 0 2px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .dof-controls > label { display: block; margin-bottom: 8px; font-size: .7rem; }
+    .dof-controls p { margin: -2px 0 9px; color: var(--muted); font-size: .62rem; line-height: 1.45; }
 
 
     .grain {
@@ -455,6 +458,22 @@
         <p id="cursor-status">Double-click a surface to change the orbit pivot.</p>
         <p id="navigation-help">Drag to orbit · Right-drag to pan · Wheel to zoom</p>
       </div>
+      <div class="dof-controls">
+        <label><input type="checkbox" id="dof-enabled" /> Depth of field</label>
+        <p>Focus follows the 3D cursor. Place it on the subject to refocus.</p>
+        <div id="dof-options" hidden>
+          <div class="control">
+            <label for="dof-aperture">Aperture</label>
+            <input id="dof-aperture" type="range" min="0" max="100" value="55" title="Higher values create a shallower focus range." />
+            <output for="dof-aperture">55</output>
+          </div>
+          <div class="control">
+            <label for="dof-blur">Blur</label>
+            <input id="dof-blur" type="range" min="0" max="100" value="60" title="Maximum blur strength away from the focus distance." />
+            <output for="dof-blur">60</output>
+          </div>
+        </div>
+      </div>
       <div class="mode-row" role="group" aria-label="Render mode">
         <button type="button" data-mode="splat" aria-pressed="false">Splats</button>
         <button type="button" data-mode="hybrid" aria-pressed="false">Hybrid</button>
@@ -538,6 +557,6 @@
 
   <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
   <script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/brush.js"></script>
-  <script type="module" src="painterly-viewer.js?v=lineart-2"></script>
+  <script type="module" src="painterly-viewer.js?v=dof-1"></script>
 </body>
 </html>

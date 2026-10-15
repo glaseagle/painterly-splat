@@ -3,6 +3,7 @@ import { brushFamilies } from './painterly-brush-matching.js?v=brushes-2';
 import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=lineart-1';
 import { createLineArt } from './painterly-lineart.js?v=lineart-1';
 import { createOrbitCamera, createCursor } from './painterly-navigation.js?v=lineart-1';
+import { createDepthOfField } from './painterly-dof.js?v=dof-1';
 import { prepareLocalSplat, normalizeImport, framedImportCamera } from './painterly-upload.js?v=fit-3';
 import { installCamera } from './painterly-camera.js?v=local-3';
 import { FlyControls } from './vendor/three/FlyControls.js';
@@ -22,6 +23,9 @@ const edgeDetail = document.querySelector('#edge-detail');
 const lineWidth = document.querySelector('#line-width');
 const lineStatus = document.querySelector('#line-status');
 const autoOrbit = document.querySelector('#auto-orbit');
+const dofEnabled = document.querySelector('#dof-enabled');
+const dofAperture = document.querySelector('#dof-aperture');
+const dofBlur = document.querySelector('#dof-blur');
 const variation = document.querySelector('#variation');
 const strokeDensity = document.querySelector('#stroke-density');
 const brushSet = document.querySelector('#brush-set');
@@ -53,7 +57,7 @@ let manifest, viewer, camera, renderer, controls, touchControls, scene, mode = '
 let ready = false, lastTick = performance.now();
 let drag = null, loadingScene = false;
 let sortPending = false, lastSort = 0;
-let lineArt, orbitControls, cursor, cursorScene;
+let lineArt, depthOfField, orbitControls, cursor, cursorScene;
 let navMode = 'orbit', placingCursor = false, pivotPending = true;
 let viewDirty = true, lineDirty = true, lastNavigation = 0, lastLineBuild = 0, lineRevision = 0;
 
@@ -100,6 +104,14 @@ document.querySelector('#place-cursor').addEventListener('click',()=>{
   if(placingCursor && mobile.matches)setMenu(false);
 });
 document.querySelector('#show-cursor').addEventListener('change',()=>viewer?.forceRenderNextFrame());
+dofEnabled.addEventListener('change',()=>{
+  document.querySelector('#dof-options').hidden=!dofEnabled.checked;
+  viewer?.forceRenderNextFrame();
+});
+for(const control of [dofAperture,dofBlur])control.addEventListener('input',()=>{
+  document.querySelector(`output[for="${control.id}"]`).value=control.value;
+  viewer?.forceRenderNextFrame();
+});
 autoOrbit.addEventListener('change',()=>{
   if(autoOrbit.checked){clearMovement();navMode='orbit';}
   configureNavigation();changed();
@@ -117,6 +129,7 @@ const yawRotation = new THREE.Quaternion();
 const pitchRotation = new THREE.Quaternion();
 const worldUp = new THREE.Vector3();
 const localRight = new THREE.Vector3(1, 0, 0);
+const focusView = new THREE.Vector3();
 
 function makeTouchControls() {
   return createTouchControls(camera, wrap, changed, scene.local ? {
@@ -223,6 +236,7 @@ async function loadScene(id, local = null) {
     touchControls?.dispose(); touchControls = null;
     orbitControls?.dispose();orbitControls=null;
     lineArt?.dispose();lineArt=null;
+    depthOfField?.dispose();depthOfField=null;
     cursor?.dispose();cursor=null;cursorScene=null;
     if (viewer) await viewer.dispose();
     scene = local || manifest.scenes.find(s => s.id === id);
@@ -259,6 +273,7 @@ async function loadScene(id, local = null) {
       }
     });
     lineArt = createLineArt(renderer, viewer.splatMesh, brushTexture);
+    depthOfField = createDepthOfField(renderer,lineArt.depthTexture);
     installBrushMaterial(viewer, brushTexture, mode, Number(density.value) / 100);
     viewer.splatMesh.material.uniforms.sizeVariation.value = Number(variation.value)/100;
     viewer.splatMesh.material.uniforms.strokeDensity.value = Number(strokeDensity.value)/100;
@@ -492,8 +507,21 @@ function tick(now) {
         lineDirty=false;lastLineBuild=now;wrap.dataset.lineStrokes=String(lineArt.count);wrap.dataset.lineRevision=String(++lineRevision);
         lineStatus.textContent=rotating?`${lineArt.count.toLocaleString()} strokes · updating live`:`${lineArt.count.toLocaleString()} strokes · projected into the scene`;
       }
+      const useDof=dofEnabled.checked;
+      if(useDof)depthOfField.begin(wrap.clientWidth,wrap.clientHeight);
       if(mode==='lines')renderer.clear();else viewer.render();
       if(mode!=='splat')lineArt.render(camera,Number(lineAmount.value)/100,.5+Number(lineWidth.value)*.045);
+      if(useDof){
+        const focus=focusView.copy(cursor.root.position).applyMatrix4(camera.matrixWorldInverse);
+        const focusDepth=Math.max(camera.near,-focus.z);
+        depthOfField.render({
+          focusDepth,
+          aperture:Number(dofAperture.value)/100,
+          blur:2+Number(dofBlur.value)*.2,
+        });
+        wrap.dataset.dofFocus=focusDepth.toFixed(5);
+      }
+      wrap.dataset.dofEnabled=String(useDof);
       cursor.root.visible=document.querySelector('#show-cursor').checked;
       cursor.update(camera,wrap.clientHeight);
       const auto=renderer.autoClear;renderer.autoClear=false;renderer.render(cursorScene,camera);renderer.autoClear=auto;
