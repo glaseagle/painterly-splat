@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { cannyEdges, decodeDepth, traceEdges } from './painterly-edges.js?v=lineart-1';
 import { unprojectDepth } from './painterly-navigation.js?v=lineart-1';
 import { chooseBrush, brushFamilies, BRUSH_VARIANTS } from './painterly-brush-matching.js?v=brushes-2';
-import { focusFalloffGLSL } from './painterly-dof.js?v=focus-1';
+import { focusFalloffGLSL } from './painterly-dof.js?v=lenses-1';
 
 export const packDepthGLSL = `
 vec3 packViewDepth(float depth) {
@@ -37,17 +37,18 @@ export function createLineArt(renderer, mesh, atlas) {
   const layer=new THREE.Scene();
   const material=new THREE.ShaderMaterial({
     transparent:true,depthTest:false,depthWrite:false,toneMapped:false,side:THREE.DoubleSide,
-    uniforms:{atlas:{value:atlas},surfaceDepth:{value:depthTarget.texture},viewport:{value:new THREE.Vector2(1,1)},lineWidth:{value:1.5},amount:{value:.75},focusEnabled:{value:1},focusDepth:{value:1},focusAperture:{value:.55},focusStrength:{value:.6}},
+    uniforms:{atlas:{value:atlas},surfaceDepth:{value:depthTarget.texture},viewport:{value:new THREE.Vector2(1,1)},lineWidth:{value:1.5},amount:{value:.75},focusEnabled:{value:1},focusDepth:{value:1},focusAperture:{value:.55},focusStrength:{value:.6},focusFarBias:{value:1.5}},
     vertexShader:`${focusFalloffGLSL}
       attribute vec3 before;attribute vec3 after;attribute vec2 strokeUV;
       attribute vec2 brushTile;attribute vec3 pigment;attribute float pressure;
-      uniform vec2 viewport;uniform float lineWidth;uniform float focusEnabled;uniform float focusDepth;uniform float focusAperture;uniform float focusStrength;
+      uniform vec2 viewport;uniform float lineWidth;uniform float focusEnabled;uniform float focusDepth;uniform float focusAperture;uniform float focusStrength;uniform float focusFarBias;
       varying vec2 vUV;varying vec2 vTile;varying vec3 vPigment;varying float vDepth;varying float vFocusFalloff;
       void main(){vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.0);
         vec4 a=projectionMatrix*modelViewMatrix*vec4(before,1.0);
         vec4 b=projectionMatrix*modelViewMatrix*vec4(after,1.0);
         float strokeDepth=max(0.0,-(modelViewMatrix*vec4(position,1.0)).z);
-        vFocusFalloff=focusEnabled*painterlyFocusFalloff(strokeDepth,focusDepth,focusAperture);
+        float sideGain=mix(1.0,focusFarBias,step(focusDepth,strokeDepth));
+        vFocusFalloff=focusEnabled*painterlyFocusFalloff(strokeDepth,focusDepth,focusAperture)*sideGain;
         vec2 tangent=(b.xy/max(b.w,0.0001)-a.xy/max(a.w,0.0001))*viewport;
         tangent=normalize(tangent+vec2(0.00001));
         vec2 normal=vec2(-tangent.y,tangent.x);
@@ -156,6 +157,7 @@ export function createLineArt(renderer, mesh, atlas) {
       material.uniforms.focusDepth.value=focus.depth||1;
       material.uniforms.focusAperture.value=focus.aperture||0;
       material.uniforms.focusStrength.value=focus.strength||0;
+      material.uniforms.focusFarBias.value=focus.farBias||1;
       const auto=renderer.autoClear;renderer.autoClear=false;renderer.render(layer,camera);renderer.autoClear=auto;
     },
     dispose(){strokes.geometry.dispose();material.dispose();base.dispose();depth.dispose();colorTarget.dispose();depthTarget.dispose();},

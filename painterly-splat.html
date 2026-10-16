@@ -84,6 +84,7 @@
     .dof-controls { margin: -5px 0 14px; padding: 10px 0 2px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
     .dof-controls > label { display: block; margin-bottom: 8px; font-size: .7rem; }
     .dof-controls p { margin: -2px 0 9px; color: var(--muted); font-size: .62rem; line-height: 1.45; }
+    .dof-controls select { width: 100%; margin: 1px 0 9px; padding: 7px; color: var(--ink); background: #24231f; border: 1px solid var(--line); font: inherit; font-size: .7rem; }
 
 
     .grain {
@@ -460,17 +461,31 @@
       </div>
       <div class="dof-controls">
         <label><input type="checkbox" id="dof-enabled" checked /> Painterly focus falloff</label>
-        <p>The cursor plane keeps the true Stroke size. Marks in front and behind grow larger and more opaque.</p>
+        <p>Thin-lens depth response around the 3D cursor, with painterly bloom and highlight bokeh.</p>
         <div id="dof-options">
+          <label for="lens-preset">Lens look</label>
+          <select id="lens-preset">
+            <option value="environmental">35mm · f/4 · Environmental</option>
+            <option value="classic">50mm · f/2 · Classic</option>
+            <option value="portrait" selected>85mm · f/1.4 · Portrait</option>
+            <option value="telephoto">135mm · f/2 · Compression</option>
+            <option value="dream">58mm · f/1.2 · Dream</option>
+            <option value="custom" disabled>Custom lens</option>
+          </select>
           <div class="control">
-            <label for="dof-aperture">Focus plane</label>
-            <input id="dof-aperture" type="range" min="0" max="100" value="68" title="Higher values narrow the plane that keeps the true stroke size." />
-            <output for="dof-aperture">68</output>
+            <label for="dof-aperture">Focus range</label>
+            <input id="dof-aperture" type="range" min="0" max="100" value="76" title="Higher values narrow the range that keeps the true stroke size." />
+            <output for="dof-aperture">76</output>
           </div>
           <div class="control">
-            <label for="dof-blur">Stroke bloom</label>
-            <input id="dof-blur" type="range" min="0" max="100" value="52" title="How much marks away from the cursor plane grow and gain opacity." />
-            <output for="dof-blur">52</output>
+            <label for="dof-blur">Depth bloom</label>
+            <input id="dof-blur" type="range" min="0" max="100" value="62" title="How much marks away from the cursor plane grow and gain opacity." />
+            <output for="dof-blur">62</output>
+          </div>
+          <div class="control">
+            <label for="dof-bokeh">Bokeh</label>
+            <input id="dof-bokeh" type="range" min="0" max="100" value="58" title="Turns sparse bright background marks into soft aperture discs." />
+            <output for="dof-bokeh">58</output>
           </div>
         </div>
       </div>
@@ -557,6 +572,6 @@
 
   <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
   <script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/brush.js"></script>
-  <script type="module" src="painterly-viewer.js?v=focus-1"></script>
+  <script type="module" src="painterly-viewer.js?v=lenses-1"></script>
 </body>
 </html>

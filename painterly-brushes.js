@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { brushFamilies, brushMatchGLSL, BRUSH_VARIANTS, strokeSizingGLSL } from './painterly-brush-matching.js?v=brushes-2';
-import { focusFalloffGLSL } from './painterly-dof.js?v=focus-1';
+import { focusFalloffGLSL } from './painterly-dof.js?v=lenses-1';
 
 const VARIANTS = BRUSH_VARIANTS, TILE = 128;
 let atlasPromise;
@@ -106,8 +106,10 @@ export function installBrushMaterial(viewer, texture, mode, size) {
   material.uniforms.focusDepth = { value: 1 };
   material.uniforms.focusAperture = { value: .55 };
   material.uniforms.focusStrength = { value: .6 };
+  material.uniforms.focusFarBias = { value: 1.5 };
+  material.uniforms.focusBokeh = { value: .5 };
   material.uniforms.brushEnabled = { value: brushFamilies.map(() => 1) };
-  const declarations = 'uniform float brushMix;\nuniform float markSize;\nuniform float sizeVariation;\nuniform float strokeDensity;\nuniform float focusEnabled;\nuniform float focusDepth;\nuniform float focusAperture;\nuniform float focusStrength;\nvarying vec4 vBrush;\nvarying float vBrushStrength;\nvarying float vFocusFalloff;\n';
+  const declarations = 'uniform float brushMix;\nuniform float markSize;\nuniform float sizeVariation;\nuniform float strokeDensity;\nuniform float focusEnabled;\nuniform float focusDepth;\nuniform float focusAperture;\nuniform float focusStrength;\nuniform float focusFarBias;\nuniform float focusBokeh;\nvarying vec4 vBrush;\nvarying float vBrushStrength;\nvarying float vFocusFalloff;\nvarying float vFocusBackground;\nvarying float vBrushLuma;\n';
   material.vertexShader = declarations + focusFalloffGLSL + '\n' + brushMatchGLSL() + strokeSizingGLSL + '\n' + material.vertexShader.replace(basisLine, `
     float major = length(basisVector1);
     float minor = length(basisVector2);
@@ -124,7 +126,11 @@ export function installBrushMaterial(viewer, texture, mode, size) {
     vBrushStrength = brushStrength(family);
     vec2 sized = strokeSize(major, minor, markSize, sizeVariation, sizeSeed, 0.0);
     float keep = clamp(strokeDensity * (major * minor) / max(1.0, sized.x * sized.y), 0.001, 1.0);
-    vFocusFalloff = focusEnabled * painterlyFocusFalloff(max(0.0, -viewCenter.z), focusDepth, focusAperture);
+    float viewDepth = max(0.0, -viewCenter.z);
+    vFocusBackground = step(focusDepth, viewDepth);
+    vBrushLuma = luma;
+    float sideGain = mix(1.0, focusFarBias, vFocusBackground);
+    vFocusFalloff = focusEnabled * painterlyFocusFalloff(viewDepth, focusDepth, focusAperture) * sideGain;
     float focusScale = 1.0 + vFocusFalloff * focusStrength * 1.4;
     float strokeMajor = sized.x * focusScale, strokeMinor = sized.y * focusScale;
     // Enlarge a stable, area-weighted set of marks so individual strokes read at
@@ -152,10 +158,21 @@ export function installBrushMaterial(viewer, texture, mode, size) {
         float strength = vBrushStrength;
         float painted = mix(gaussian * 0.20, stroke * strength, vBrush.z) * vColor.a;
         painted = min(1.0, painted * (1.0 + vFocusFalloff * focusStrength * 0.75));
+        // A sparse set of bright background marks resolve into soft aperture
+        // discs with a luminous rim, instead of turning every brush into a blob.
+        float radial = length(vPosition) * 0.353553;
+        float disc = 1.0 - smoothstep(0.70, 1.0, radial);
+        float rim = smoothstep(0.48, 0.78, radial) * (1.0 - smoothstep(0.78, 0.98, radial));
+        float highlight = smoothstep(0.50, 0.90, vBrushLuma);
+        float sparse = smoothstep(0.68, 0.94, vBrush.w);
+        float bokehMix = clamp(focusBokeh * vFocusBackground * vFocusFalloff * highlight * (0.3 + 0.7 * sparse), 0.0, 1.0);
+        float bokehAlpha = (disc * 0.30 + rim * (0.34 + highlight * 0.38)) * vColor.a;
+        painted = mix(painted, max(painted, bokehAlpha), bokehMix);
         opacity = mix(opacity, painted, brushMix);
         vec3 paper = vec3(0.95, 0.92, 0.85);
         vec3 paint = floor(color * 22.0 + 0.5) / 22.0;
         paint = mix(paint, paper, mix(0.22, 0.06, vBrush.z));
+        paint = mix(paint, mix(paint, vec3(1.0), 0.22), bokehMix * 0.7);
         color = mix(color, paint, brushMix);
       }
     `);

@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { brushFamilies } from './painterly-brush-matching.js?v=brushes-2';
-import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=focus-1';
-import { createLineArt } from './painterly-lineart.js?v=focus-1';
+import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=lenses-1';
+import { createLineArt } from './painterly-lineart.js?v=lenses-1';
 import { createOrbitCamera, createCursor } from './painterly-navigation.js?v=lineart-1';
+import { lensPresets } from './painterly-dof.js?v=lenses-1';
 import { prepareLocalSplat, normalizeImport, framedImportCamera } from './painterly-upload.js?v=fit-3';
 import { installCamera } from './painterly-camera.js?v=local-3';
 import { FlyControls } from './vendor/three/FlyControls.js';
@@ -25,6 +26,8 @@ const autoOrbit = document.querySelector('#auto-orbit');
 const dofEnabled = document.querySelector('#dof-enabled');
 const dofAperture = document.querySelector('#dof-aperture');
 const dofBlur = document.querySelector('#dof-blur');
+const dofBokeh = document.querySelector('#dof-bokeh');
+const lensPreset = document.querySelector('#lens-preset');
 const variation = document.querySelector('#variation');
 const strokeDensity = document.querySelector('#stroke-density');
 const brushSet = document.querySelector('#brush-set');
@@ -59,6 +62,20 @@ let sortPending = false, lastSort = 0;
 let lineArt, orbitControls, cursor, cursorScene;
 let navMode = 'orbit', placingCursor = false, pivotPending = true;
 let viewDirty = true, lineDirty = true, lastNavigation = 0, lastLineBuild = 0, lineRevision = 0;
+const viewParams = new URLSearchParams(location.search);
+let activeLens = lensPresets.portrait;
+let pendingOrbitAngle = Number(viewParams.get('angle')) || 0;
+
+function applyLensPreset(name) {
+  const profile=lensPresets[name] || lensPresets.portrait;
+  activeLens={...profile};lensPreset.value=lensPresets[name]?name:'portrait';
+  for(const [control,value] of [[dofAperture,profile.aperture],[dofBlur,profile.strength],[dofBokeh,profile.bokeh]]){
+    control.value=String(Math.round(value*100));
+    document.querySelector(`output[for="${control.id}"]`).value=control.value;
+  }
+  viewer?.forceRenderNextFrame();
+}
+lensPreset.addEventListener('change',()=>applyLensPreset(lensPreset.value));
 
 function configureNavigation() {
   orbitControls?.dispose(); orbitControls = null;
@@ -107,8 +124,10 @@ dofEnabled.addEventListener('change',()=>{
   document.querySelector('#dof-options').hidden=!dofEnabled.checked;
   viewer?.forceRenderNextFrame();
 });
-for(const control of [dofAperture,dofBlur])control.addEventListener('input',()=>{
+for(const control of [dofAperture,dofBlur,dofBokeh])control.addEventListener('input',()=>{
   document.querySelector(`output[for="${control.id}"]`).value=control.value;
+  activeLens={...activeLens,aperture:Number(dofAperture.value)/100,strength:Number(dofBlur.value)/100,bokeh:Number(dofBokeh.value)/100};
+  lensPreset.value='custom';
   viewer?.forceRenderNextFrame();
 });
 autoOrbit.addEventListener('change',()=>{
@@ -129,6 +148,8 @@ const pitchRotation = new THREE.Quaternion();
 const worldUp = new THREE.Vector3();
 const localRight = new THREE.Vector3(1, 0, 0);
 const focusView = new THREE.Vector3();
+applyLensPreset(viewParams.get('lens') || 'portrait');
+if(viewParams.get('cursor')==='0')document.querySelector('#show-cursor').checked=false;
 
 function makeTouchControls() {
   return createTouchControls(camera, wrap, changed, scene.local ? {
@@ -495,7 +516,14 @@ function tick(now) {
       if(viewDirty || !lineArt.hasDepth){lineArt.captureDepth(camera,wrap.clientWidth,wrap.clientHeight);viewDirty=false;}
       if(pivotPending){
         const target=lineArt.pick(.5,.5);
-        if(target)cursor.root.position.copy(target);
+        if(target){
+          cursor.root.position.copy(target);
+          if(pendingOrbitAngle){
+            camera.position.sub(target).applyAxisAngle(camera.up.clone().normalize(),THREE.MathUtils.degToRad(pendingOrbitAngle)).add(target);
+            camera.lookAt(target);camera.updateMatrixWorld(true);
+            pendingOrbitAngle=0;sortPending=true;viewDirty=true;lineDirty=true;
+          }
+        }
         pivotPending=false;configureNavigation();
         wrap.dataset.cursorPosition=cursor.root.position.toArray().map(v=>v.toFixed(5)).join(',');
       }
@@ -507,12 +535,14 @@ function tick(now) {
       const useDof=dofEnabled.checked && mode!=='splat';
       const focus=focusView.copy(cursor.root.position).applyMatrix4(camera.matrixWorldInverse);
       const focusDepth=Math.max(camera.near,-focus.z);
-      const focusStyle={enabled:useDof,depth:focusDepth,aperture:Number(dofAperture.value)/100,strength:Number(dofBlur.value)/100};
+      const focusStyle={enabled:useDof,depth:focusDepth,aperture:Number(dofAperture.value)/100,strength:Number(dofBlur.value)/100,bokeh:Number(dofBokeh.value)/100,farBias:activeLens.farBias};
       const splatUniforms=viewer.splatMesh.material.uniforms;
       splatUniforms.focusEnabled.value=useDof?1:0;
       splatUniforms.focusDepth.value=focusDepth;
       splatUniforms.focusAperture.value=focusStyle.aperture;
       splatUniforms.focusStrength.value=focusStyle.strength;
+      splatUniforms.focusFarBias.value=focusStyle.farBias;
+      splatUniforms.focusBokeh.value=focusStyle.bokeh;
       if(mode==='lines')renderer.clear();else viewer.render();
       if(mode!=='splat')lineArt.render(camera,Number(lineAmount.value)/100,.5+Number(lineWidth.value)*.045,focusStyle);
       wrap.dataset.dofFocus=focusDepth.toFixed(5);
@@ -535,7 +565,8 @@ try {
   await setMode('brush');
   if (!brushTexture) throw new Error(error.textContent || 'Could not prepare brushes.');
   requestAnimationFrame(tick);
-  await loadScene('train');
+  const requestedScene=viewParams.get('scene');
+  await loadScene(manifest.scenes.some(item=>item.id===requestedScene)?requestedScene:'train');
 } catch (e) {
   loading.hidden = true; error.style.display = 'block'; error.textContent = e.message;
 }

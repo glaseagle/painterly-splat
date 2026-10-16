@@ -14,9 +14,13 @@ is a world-space marker with three axes and rings. Hide it with **Show cursor**.
 art while it moves. **Fly** retains the original free camera; **Reset view** restores the capture view.
 
 **Painterly focus falloff** uses the 3D cursor as its focal plane. Marks on that
-plane keep the exact Stroke size; marks in front and behind grow and gain opacity.
-Focus plane controls the depth range and Stroke bloom controls the strength. The
-same falloff shapes Gaussian brush marks and projected line art.
+plane keep the exact Stroke size. A thin-lens circle-of-confusion curve grows
+gradually through the background and approaches its optical limit at infinity;
+foreground blur rises faster near the camera. Five lens presets cover restrained
+35mm depth through 85mm portrait, 135mm compression and a bright 58mm dream look.
+Focus range, Depth bloom and Bokeh remain adjustable. Sparse bright background
+splats resolve into luminous aperture discs, while Gaussian brush marks and
+projected line art share the same depth response.
 
 **Line art** replaces the former Contour flow and Curved strokes controls. A Canny
 pass detects edges in the unpainted splats, traces connected paths, samples scene
