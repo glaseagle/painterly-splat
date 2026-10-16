@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { cannyEdges, decodeDepth, traceEdges } from './painterly-edges.js?v=lineart-1';
 import { unprojectDepth } from './painterly-navigation.js?v=lineart-1';
 import { chooseBrush, brushFamilies, BRUSH_VARIANTS } from './painterly-brush-matching.js?v=brushes-2';
+import { focusFalloffGLSL } from './painterly-dof.js?v=focus-1';
 
 export const packDepthGLSL = `
 vec3 packViewDepth(float depth) {
@@ -36,31 +37,37 @@ export function createLineArt(renderer, mesh, atlas) {
   const layer=new THREE.Scene();
   const material=new THREE.ShaderMaterial({
     transparent:true,depthTest:false,depthWrite:false,toneMapped:false,side:THREE.DoubleSide,
-    uniforms:{atlas:{value:atlas},surfaceDepth:{value:depthTarget.texture},viewport:{value:new THREE.Vector2(1,1)},lineWidth:{value:1.5},amount:{value:.75}},
-    vertexShader:`attribute vec3 before;attribute vec3 after;attribute vec2 strokeUV;
+    uniforms:{atlas:{value:atlas},surfaceDepth:{value:depthTarget.texture},viewport:{value:new THREE.Vector2(1,1)},lineWidth:{value:1.5},amount:{value:.75},focusEnabled:{value:1},focusDepth:{value:1},focusAperture:{value:.55},focusStrength:{value:.6}},
+    vertexShader:`${focusFalloffGLSL}
+      attribute vec3 before;attribute vec3 after;attribute vec2 strokeUV;
       attribute vec2 brushTile;attribute vec3 pigment;attribute float pressure;
-      uniform vec2 viewport;uniform float lineWidth;
-      varying vec2 vUV;varying vec2 vTile;varying vec3 vPigment;varying float vDepth;
+      uniform vec2 viewport;uniform float lineWidth;uniform float focusEnabled;uniform float focusDepth;uniform float focusAperture;uniform float focusStrength;
+      varying vec2 vUV;varying vec2 vTile;varying vec3 vPigment;varying float vDepth;varying float vFocusFalloff;
       void main(){vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.0);
         vec4 a=projectionMatrix*modelViewMatrix*vec4(before,1.0);
         vec4 b=projectionMatrix*modelViewMatrix*vec4(after,1.0);
+        float strokeDepth=max(0.0,-(modelViewMatrix*vec4(position,1.0)).z);
+        vFocusFalloff=focusEnabled*painterlyFocusFalloff(strokeDepth,focusDepth,focusAperture);
         vec2 tangent=(b.xy/max(b.w,0.0001)-a.xy/max(a.w,0.0001))*viewport;
         tangent=normalize(tangent+vec2(0.00001));
         vec2 normal=vec2(-tangent.y,tangent.x);
-        p.xy+=normal*(strokeUV.y*2.0-1.0)*lineWidth*pressure*2.0/viewport*p.w;
+        float focusScale=1.0+vFocusFalloff*focusStrength*2.4;
+        p.xy+=normal*(strokeUV.y*2.0-1.0)*lineWidth*focusScale*pressure*2.0/viewport*p.w;
         gl_Position=p;vUV=strokeUV;vTile=brushTile;vPigment=pigment;
-        vDepth=-(modelViewMatrix*vec4(position,1.0)).z;
+        vDepth=strokeDepth;
       }`,
     fragmentShader:`${packDepthGLSL}
       uniform sampler2D atlas;uniform sampler2D surfaceDepth;uniform vec2 viewport;uniform float amount;
-      varying vec2 vUV;varying vec2 vTile;varying vec3 vPigment;varying float vDepth;
+      uniform float focusStrength;
+      varying vec2 vUV;varying vec2 vTile;varying vec3 vPigment;varying float vDepth;varying float vFocusFalloff;
       void main(){vec4 surface=texture2D(surfaceDepth,gl_FragCoord.xy/viewport);
         float depth=unpackViewDepth(surface.rgb);
         if(surface.a<0.5||vDepth>depth+max(0.003,depth*0.035)||vDepth<=0.0)discard;
         vec2 uv=(vTile+clamp(vUV,0.005,0.995))/vec2(${BRUSH_VARIANTS.toFixed(1)},${brushFamilies.length.toFixed(1)});
         float ink=pow(texture2D(atlas,uv).a,0.55);
         float ends=smoothstep(0.0,0.08,vUV.x)*smoothstep(0.0,0.08,1.0-vUV.x);
-        gl_FragColor=vec4(vPigment,ink*ends*amount);
+        float focusOpacity=1.0+vFocusFalloff*focusStrength*1.25;
+        gl_FragColor=vec4(vPigment,min(1.0,ink*ends*amount*focusOpacity));
       }`,
   });
   const strokes=new THREE.Mesh(new THREE.BufferGeometry(),material);strokes.frustumCulled=false;layer.add(strokes);
@@ -142,9 +149,13 @@ export function createLineArt(renderer, mesh, atlas) {
       }
       return chosen<0?null:unprojectDepth(chosen%width,Math.floor(chosen/width),depths[chosen],width,height,snapshot);
     },
-    render(camera,amount,width){
+    render(camera,amount,width,focus={}){
       if(!lineCount||!amount)return;
       material.uniforms.amount.value=amount;material.uniforms.lineWidth.value=width;
+      material.uniforms.focusEnabled.value=focus.enabled?1:0;
+      material.uniforms.focusDepth.value=focus.depth||1;
+      material.uniforms.focusAperture.value=focus.aperture||0;
+      material.uniforms.focusStrength.value=focus.strength||0;
       const auto=renderer.autoClear;renderer.autoClear=false;renderer.render(layer,camera);renderer.autoClear=auto;
     },
     dispose(){strokes.geometry.dispose();material.dispose();base.dispose();depth.dispose();colorTarget.dispose();depthTarget.dispose();},

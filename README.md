@@ -2,7 +2,7 @@
 
 Real Gaussian scans rendered as view-dependent p5.brush strokes.
 
-**[Open the live demo](https://michael.software/painterly-splat?v=dof-1)**
+**[Open the live demo](https://michael.software/painterly-splat?v=focus-1)**
 
 The train opens in Brush mode. Compare Splats / Hybrid / Brush / Lines, choose
 from 18 brush families, and adjust stroke size, variation, density, and line art.
@@ -13,10 +13,10 @@ is a world-space marker with three axes and rings. Hide it with **Show cursor**.
 **Auto orbit** turns continuously around the cursor and refreshes projected line
 art while it moves. **Fly** retains the original free camera; **Reset view** restores the capture view.
 
-**Depth of field** uses the 3D cursor as its focus point. Aperture controls how
-quickly the scene falls out of focus, while Blur caps the largest bokeh radius.
-The final lens pass affects splats, brush marks, and projected lines; the cursor
-and HTML controls remain crisp so refocusing stays usable.
+**Painterly focus falloff** uses the 3D cursor as its focal plane. Marks on that
+plane keep the exact Stroke size; marks in front and behind grow and gain opacity.
+Focus plane controls the depth range and Stroke bloom controls the strength. The
+same falloff shapes Gaussian brush marks and projected line art.
 
 **Line art** replaces the former Contour flow and Curved strokes controls. A Canny
 pass detects edges in the unpainted splats, traces connected paths, samples scene

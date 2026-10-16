@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { brushFamilies, brushMatchGLSL, BRUSH_VARIANTS, strokeSizingGLSL } from './painterly-brush-matching.js?v=brushes-2';
+import { focusFalloffGLSL } from './painterly-dof.js?v=focus-1';
 
 const VARIANTS = BRUSH_VARIANTS, TILE = 128;
 let atlasPromise;
@@ -101,9 +102,13 @@ export function installBrushMaterial(viewer, texture, mode, size) {
   material.uniforms.markSize = { value: size };
   material.uniforms.sizeVariation = { value: .85 };
   material.uniforms.strokeDensity = { value: 1 };
+  material.uniforms.focusEnabled = { value: 1 };
+  material.uniforms.focusDepth = { value: 1 };
+  material.uniforms.focusAperture = { value: .55 };
+  material.uniforms.focusStrength = { value: .6 };
   material.uniforms.brushEnabled = { value: brushFamilies.map(() => 1) };
-  const declarations = 'uniform float brushMix;\nuniform float markSize;\nuniform float sizeVariation;\nuniform float strokeDensity;\nvarying vec4 vBrush;\nvarying float vBrushStrength;\n';
-  material.vertexShader = declarations + brushMatchGLSL() + strokeSizingGLSL + '\n' + material.vertexShader.replace(basisLine, `
+  const declarations = 'uniform float brushMix;\nuniform float markSize;\nuniform float sizeVariation;\nuniform float strokeDensity;\nuniform float focusEnabled;\nuniform float focusDepth;\nuniform float focusAperture;\nuniform float focusStrength;\nvarying vec4 vBrush;\nvarying float vBrushStrength;\nvarying float vFocusFalloff;\n';
+  material.vertexShader = declarations + focusFalloffGLSL + '\n' + brushMatchGLSL() + strokeSizingGLSL + '\n' + material.vertexShader.replace(basisLine, `
     float major = length(basisVector1);
     float minor = length(basisVector2);
     float luma = dot(vColor.rgb, vec3(0.299, 0.587, 0.114));
@@ -118,8 +123,10 @@ export function installBrushMaterial(viewer, texture, mode, size) {
     float family = matchBrush(major / max(minor, 0.05), minor, vColor.a, luma, matchSeed);
     vBrushStrength = brushStrength(family);
     vec2 sized = strokeSize(major, minor, markSize, sizeVariation, sizeSeed, 0.0);
-    float strokeMajor = sized.x, strokeMinor = sized.y;
-    float keep = clamp(strokeDensity * (major * minor) / max(1.0, strokeMajor * strokeMinor), 0.001, 1.0);
+    float keep = clamp(strokeDensity * (major * minor) / max(1.0, sized.x * sized.y), 0.001, 1.0);
+    vFocusFalloff = focusEnabled * painterlyFocusFalloff(max(0.0, -viewCenter.z), focusDepth, focusAperture);
+    float focusScale = 1.0 + vFocusFalloff * focusStrength * 2.4;
+    float strokeMajor = sized.x * focusScale, strokeMinor = sized.y * focusScale;
     // Enlarge a stable, area-weighted set of marks so individual strokes read at
     // screen scale. Other Gaussians remain as a translucent watercolor ground.
     float fade = max(0.002, keep * 0.18);
@@ -144,6 +151,7 @@ export function installBrushMaterial(viewer, texture, mode, size) {
         // Fine lines are decisive; broad pigment stays translucent.
         float strength = vBrushStrength;
         float painted = mix(gaussian * 0.20, stroke * strength, vBrush.z) * vColor.a;
+        painted = min(1.0, painted * (1.0 + vFocusFalloff * focusStrength * 1.25));
         opacity = mix(opacity, painted, brushMix);
         vec3 paper = vec3(0.95, 0.92, 0.85);
         vec3 paint = floor(color * 22.0 + 0.5) / 22.0;

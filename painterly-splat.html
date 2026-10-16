@@ -459,18 +459,18 @@
         <p id="navigation-help">Drag to orbit · Right-drag to pan · Wheel to zoom</p>
       </div>
       <div class="dof-controls">
-        <label><input type="checkbox" id="dof-enabled" /> Depth of field</label>
-        <p>Focus follows the 3D cursor. Place it on the subject to refocus.</p>
-        <div id="dof-options" hidden>
+        <label><input type="checkbox" id="dof-enabled" checked /> Painterly focus falloff</label>
+        <p>The cursor plane keeps the true Stroke size. Marks in front and behind grow larger and more opaque.</p>
+        <div id="dof-options">
           <div class="control">
-            <label for="dof-aperture">Aperture</label>
-            <input id="dof-aperture" type="range" min="0" max="100" value="55" title="Higher values create a shallower focus range." />
-            <output for="dof-aperture">55</output>
+            <label for="dof-aperture">Focus plane</label>
+            <input id="dof-aperture" type="range" min="0" max="100" value="68" title="Higher values narrow the plane that keeps the true stroke size." />
+            <output for="dof-aperture">68</output>
           </div>
           <div class="control">
-            <label for="dof-blur">Blur</label>
-            <input id="dof-blur" type="range" min="0" max="100" value="60" title="Maximum blur strength away from the focus distance." />
-            <output for="dof-blur">60</output>
+            <label for="dof-blur">Stroke bloom</label>
+            <input id="dof-blur" type="range" min="0" max="100" value="58" title="How much marks away from the cursor plane grow and gain opacity." />
+            <output for="dof-blur">58</output>
           </div>
         </div>
       </div>
@@ -557,6 +557,6 @@
 
   <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
   <script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/brush.js"></script>
-  <script type="module" src="painterly-viewer.js?v=dof-1"></script>
+  <script type="module" src="painterly-viewer.js?v=focus-1"></script>
 </body>
 </html>

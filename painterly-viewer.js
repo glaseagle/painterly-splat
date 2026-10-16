@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import { brushFamilies } from './painterly-brush-matching.js?v=brushes-2';
-import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=lineart-1';
-import { createLineArt } from './painterly-lineart.js?v=lineart-1';
+import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=focus-1';
+import { createLineArt } from './painterly-lineart.js?v=focus-1';
 import { createOrbitCamera, createCursor } from './painterly-navigation.js?v=lineart-1';
-import { createDepthOfField } from './painterly-dof.js?v=dof-1';
 import { prepareLocalSplat, normalizeImport, framedImportCamera } from './painterly-upload.js?v=fit-3';
 import { installCamera } from './painterly-camera.js?v=local-3';
 import { FlyControls } from './vendor/three/FlyControls.js';
@@ -57,7 +56,7 @@ let manifest, viewer, camera, renderer, controls, touchControls, scene, mode = '
 let ready = false, lastTick = performance.now();
 let drag = null, loadingScene = false;
 let sortPending = false, lastSort = 0;
-let lineArt, depthOfField, orbitControls, cursor, cursorScene;
+let lineArt, orbitControls, cursor, cursorScene;
 let navMode = 'orbit', placingCursor = false, pivotPending = true;
 let viewDirty = true, lineDirty = true, lastNavigation = 0, lastLineBuild = 0, lineRevision = 0;
 
@@ -236,7 +235,6 @@ async function loadScene(id, local = null) {
     touchControls?.dispose(); touchControls = null;
     orbitControls?.dispose();orbitControls=null;
     lineArt?.dispose();lineArt=null;
-    depthOfField?.dispose();depthOfField=null;
     cursor?.dispose();cursor=null;cursorScene=null;
     if (viewer) await viewer.dispose();
     scene = local || manifest.scenes.find(s => s.id === id);
@@ -273,7 +271,6 @@ async function loadScene(id, local = null) {
       }
     });
     lineArt = createLineArt(renderer, viewer.splatMesh, brushTexture);
-    depthOfField = createDepthOfField(renderer,lineArt.depthTexture);
     installBrushMaterial(viewer, brushTexture, mode, Number(density.value) / 100);
     viewer.splatMesh.material.uniforms.sizeVariation.value = Number(variation.value)/100;
     viewer.splatMesh.material.uniforms.strokeDensity.value = Number(strokeDensity.value)/100;
@@ -507,20 +504,18 @@ function tick(now) {
         lineDirty=false;lastLineBuild=now;wrap.dataset.lineStrokes=String(lineArt.count);wrap.dataset.lineRevision=String(++lineRevision);
         lineStatus.textContent=rotating?`${lineArt.count.toLocaleString()} strokes · updating live`:`${lineArt.count.toLocaleString()} strokes · projected into the scene`;
       }
-      const useDof=dofEnabled.checked;
-      if(useDof)depthOfField.begin(wrap.clientWidth,wrap.clientHeight);
+      const useDof=dofEnabled.checked && mode!=='splat';
+      const focus=focusView.copy(cursor.root.position).applyMatrix4(camera.matrixWorldInverse);
+      const focusDepth=Math.max(camera.near,-focus.z);
+      const focusStyle={enabled:useDof,depth:focusDepth,aperture:Number(dofAperture.value)/100,strength:Number(dofBlur.value)/100};
+      const splatUniforms=viewer.splatMesh.material.uniforms;
+      splatUniforms.focusEnabled.value=useDof?1:0;
+      splatUniforms.focusDepth.value=focusDepth;
+      splatUniforms.focusAperture.value=focusStyle.aperture;
+      splatUniforms.focusStrength.value=focusStyle.strength;
       if(mode==='lines')renderer.clear();else viewer.render();
-      if(mode!=='splat')lineArt.render(camera,Number(lineAmount.value)/100,.5+Number(lineWidth.value)*.045);
-      if(useDof){
-        const focus=focusView.copy(cursor.root.position).applyMatrix4(camera.matrixWorldInverse);
-        const focusDepth=Math.max(camera.near,-focus.z);
-        depthOfField.render({
-          focusDepth,
-          aperture:Number(dofAperture.value)/100,
-          blur:2+Number(dofBlur.value)*.2,
-        });
-        wrap.dataset.dofFocus=focusDepth.toFixed(5);
-      }
+      if(mode!=='splat')lineArt.render(camera,Number(lineAmount.value)/100,.5+Number(lineWidth.value)*.045,focusStyle);
+      wrap.dataset.dofFocus=focusDepth.toFixed(5);
       wrap.dataset.dofEnabled=String(useDof);
       cursor.root.visible=document.querySelector('#show-cursor').checked;
       cursor.update(camera,wrap.clientHeight);
