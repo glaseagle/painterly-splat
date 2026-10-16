@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { cannyEdges, decodeDepth, traceEdges } from './painterly-edges.js?v=lineart-1';
 import { unprojectDepth } from './painterly-navigation.js?v=lineart-1';
-import { chooseBrush, brushFamilies, BRUSH_VARIANTS } from './painterly-brush-matching.js?v=brushes-2';
+import { chooseBrush, brushFamilies, BRUSH_VARIANTS } from './painterly-brush-matching.js?v=tools-1';
 import { focusFalloffGLSL } from './painterly-dof.js?v=lenses-2';
 
 export const packDepthGLSL = `

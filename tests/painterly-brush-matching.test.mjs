@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { brushFamilies, chooseBrush } from '../painterly-brush-matching.js';
+import { brushFamilies, chooseBrush, DEFAULT_ENABLED_BRUSHES } from '../painterly-brush-matching.js';
 
 test('the matcher can select every distinct drawing tool', () => {
   brushFamilies.forEach((descriptor, i) => assert.equal(chooseBrush(descriptor), i, descriptor.name));
@@ -37,4 +37,10 @@ test('disabled tools never win matching, including when only one remains', () =>
 test('every built-in p5.brush tool is represented alongside custom paint', () => {
   const tools = new Set(brushFamilies.map(b=>b.tool));
   for (const tool of ['2B','HB','2H','cpencil','pen','rotring','spray','marker','pastel','charcoal','crayon']) assert.ok(tools.has(tool),tool);
+});
+
+test('the default palette enables every brush except Flat marker', () => {
+  assert.equal(DEFAULT_ENABLED_BRUSHES.filter(Boolean).length,brushFamilies.length-1);
+  assert.equal(DEFAULT_ENABLED_BRUSHES[brushFamilies.findIndex(brush=>brush.tool==='scan-flat')],0);
+  brushFamilies.forEach((brush,index)=>{if(brush.tool!=='scan-flat')assert.equal(DEFAULT_ENABLED_BRUSHES[index],1);});
 });

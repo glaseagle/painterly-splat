@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { brushFamilies, brushMatchGLSL, BRUSH_VARIANTS, strokeSizingGLSL } from './painterly-brush-matching.js?v=brushes-2';
+import { brushFamilies, brushMatchGLSL, BRUSH_VARIANTS, strokeSizingGLSL } from './painterly-brush-matching.js?v=tools-1';
 import { focusFalloffGLSL } from './painterly-dof.js?v=lenses-2';
 
 const VARIANTS = BRUSH_VARIANTS, TILE = 128;

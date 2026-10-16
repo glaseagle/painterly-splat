@@ -21,6 +21,8 @@ export const brushFamilies = [
   { name: 'Scumble', aspect: 1.55, width: 5, opacity: .55, luma: .42, strength: .76, group: 'paint', tool: 'scan-scumble', weight: 2.3 },
 ];
 
+export const DEFAULT_ENABLED_BRUSHES = brushFamilies.map(brush => Number(brush.tool !== 'scan-flat'));
+
 export function chooseBrush({ aspect, width, opacity, luma }, enabled = brushFamilies.map(() => 1)) {
   let best = Infinity, chosen = 0;
   brushFamilies.forEach((brush, index) => {

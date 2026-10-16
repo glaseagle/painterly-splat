@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { brushFamilies } from './painterly-brush-matching.js?v=brushes-2';
-import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=lenses-2';
-import { createLineArt } from './painterly-lineart.js?v=lenses-2';
+import { brushFamilies, DEFAULT_ENABLED_BRUSHES } from './painterly-brush-matching.js?v=tools-1';
+import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=tools-1';
+import { createLineArt } from './painterly-lineart.js?v=tools-1';
 import { createOrbitCamera, createCursor } from './painterly-navigation.js?v=lineart-1';
 import { lensPresets } from './painterly-dof.js?v=lenses-2';
 import { prepareLocalSplat, normalizeImport, framedImportCamera } from './painterly-upload.js?v=fit-3';
@@ -31,7 +31,7 @@ const lensPreset = document.querySelector('#lens-preset');
 const variation = document.querySelector('#variation');
 const strokeDensity = document.querySelector('#stroke-density');
 const brushSet = document.querySelector('#brush-set');
-const enabledBrushes = brushFamilies.map(() => 1);
+const enabledBrushes = [...DEFAULT_ENABLED_BRUSHES];
 function updateBrushSelection() {
   document.querySelectorAll('[data-brush]').forEach(button => button.setAttribute('aria-pressed',String(Boolean(enabledBrushes[Number(button.dataset.brush)]))));
   document.querySelector('#brush-count').textContent = `${enabledBrushes.filter(Boolean).length} selected`;
@@ -40,7 +40,9 @@ function updateBrushSelection() {
   viewer?.forceRenderNextFrame();
 }
 brushSet.addEventListener('change', () => {
-  brushFamilies.forEach((b,i) => { enabledBrushes[i] = Number(brushSet.value === 'all' || b.group === brushSet.value); });
+  brushFamilies.forEach((b,i) => {
+    enabledBrushes[i] = Number(brushSet.value === 'all' || brushSet.value === 'default' && b.tool !== 'scan-flat' || b.group === brushSet.value);
+  });
   updateBrushSelection();
 });
 document.querySelector('#brush-palette').addEventListener('click', event => {

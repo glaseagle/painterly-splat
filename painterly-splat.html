@@ -530,9 +530,9 @@
       <p id="line-status" role="status">Line art updates after the camera stops.</p>
 
       <div class="brush-options" id="brush-options">
-        <label for="brush-set">Drawing tools · <span id="brush-count">18 selected</span></label>
+        <label for="brush-set">Drawing tools · <span id="brush-count">17 selected</span></label>
         <select id="brush-set" aria-label="Brush collection">
-          <option value="all">All tools</option><option value="paint">Paint &amp; washes</option>
+          <option value="default" selected>Everything except Flat marker</option><option value="all">All tools</option><option value="paint">Paint &amp; washes</option>
           <option value="draw">Pencil &amp; ink</option><option value="custom" disabled>Custom selection</option>
         </select>
         <p>Tap tools to include them. Each Gaussian chooses a close match for its shape, size and tone.</p>
@@ -572,6 +572,6 @@
 
   <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
   <script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/brush.js"></script>
-  <script type="module" src="painterly-viewer.js?v=lenses-2"></script>
+  <script type="module" src="painterly-viewer.js?v=tools-1"></script>
 </body>
 </html>
