@@ -51,7 +51,7 @@ export function createLineArt(renderer, mesh, atlas) {
         vec2 tangent=(b.xy/max(b.w,0.0001)-a.xy/max(a.w,0.0001))*viewport;
         tangent=normalize(tangent+vec2(0.00001));
         vec2 normal=vec2(-tangent.y,tangent.x);
-        float focusScale=1.0+vFocusFalloff*focusStrength*2.4;
+        float focusScale=1.0+vFocusFalloff*focusStrength*1.4;
         p.xy+=normal*(strokeUV.y*2.0-1.0)*lineWidth*focusScale*pressure*2.0/viewport*p.w;
         gl_Position=p;vUV=strokeUV;vTile=brushTile;vPigment=pigment;
         vDepth=strokeDepth;
@@ -66,7 +66,7 @@ export function createLineArt(renderer, mesh, atlas) {
         vec2 uv=(vTile+clamp(vUV,0.005,0.995))/vec2(${BRUSH_VARIANTS.toFixed(1)},${brushFamilies.length.toFixed(1)});
         float ink=pow(texture2D(atlas,uv).a,0.55);
         float ends=smoothstep(0.0,0.08,vUV.x)*smoothstep(0.0,0.08,1.0-vUV.x);
-        float focusOpacity=1.0+vFocusFalloff*focusStrength*1.25;
+        float focusOpacity=1.0+vFocusFalloff*focusStrength*0.75;
         gl_FragColor=vec4(vPigment,min(1.0,ink*ends*amount*focusOpacity));
       }`,
   });

@@ -125,7 +125,7 @@ export function installBrushMaterial(viewer, texture, mode, size) {
     vec2 sized = strokeSize(major, minor, markSize, sizeVariation, sizeSeed, 0.0);
     float keep = clamp(strokeDensity * (major * minor) / max(1.0, sized.x * sized.y), 0.001, 1.0);
     vFocusFalloff = focusEnabled * painterlyFocusFalloff(max(0.0, -viewCenter.z), focusDepth, focusAperture);
-    float focusScale = 1.0 + vFocusFalloff * focusStrength * 2.4;
+    float focusScale = 1.0 + vFocusFalloff * focusStrength * 1.4;
     float strokeMajor = sized.x * focusScale, strokeMinor = sized.y * focusScale;
     // Enlarge a stable, area-weighted set of marks so individual strokes read at
     // screen scale. Other Gaussians remain as a translucent watercolor ground.
@@ -151,7 +151,7 @@ export function installBrushMaterial(viewer, texture, mode, size) {
         // Fine lines are decisive; broad pigment stays translucent.
         float strength = vBrushStrength;
         float painted = mix(gaussian * 0.20, stroke * strength, vBrush.z) * vColor.a;
-        painted = min(1.0, painted * (1.0 + vFocusFalloff * focusStrength * 1.25));
+        painted = min(1.0, painted * (1.0 + vFocusFalloff * focusStrength * 0.75));
         opacity = mix(opacity, painted, brushMix);
         vec3 paper = vec3(0.95, 0.92, 0.85);
         vec3 paint = floor(color * 22.0 + 0.5) / 22.0;

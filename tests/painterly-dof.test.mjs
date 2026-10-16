@@ -16,5 +16,5 @@ test('aperture narrows the true-size region and bloom raises size and opacity',(
 });
 test('focus falloff rejects missing depth and clamps distant marks',()=>{
   assert.equal(focusFalloff(0,3,1),0);
-  assert.deepEqual(focusStrokeStyle(30,3,1,1),{falloff:1,size:3.4,opacity:2.25});
+  assert.deepEqual(focusStrokeStyle(30,3,1,1),{falloff:1,size:2.4,opacity:1.75});
 });

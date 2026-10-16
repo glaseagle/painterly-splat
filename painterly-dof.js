@@ -13,8 +13,8 @@ export function focusStrokeStyle(depth, focusDepth, aperture, strength) {
   const amount = Math.min(1, Math.max(0, strength));
   return {
     falloff,
-    size: 1 + falloff * amount * 2.4,
-    opacity: 1 + falloff * amount * 1.25,
+    size: 1 + falloff * amount * 1.4,
+    opacity: 1 + falloff * amount * .75,
   };
 }
 
