@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { brushFamilies } from './painterly-brush-matching.js?v=brushes-2';
-import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=lenses-1';
-import { createLineArt } from './painterly-lineart.js?v=lenses-1';
+import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=lenses-2';
+import { createLineArt } from './painterly-lineart.js?v=lenses-2';
 import { createOrbitCamera, createCursor } from './painterly-navigation.js?v=lineart-1';
-import { lensPresets } from './painterly-dof.js?v=lenses-1';
+import { lensPresets } from './painterly-dof.js?v=lenses-2';
 import { prepareLocalSplat, normalizeImport, framedImportCamera } from './painterly-upload.js?v=fit-3';
 import { installCamera } from './painterly-camera.js?v=local-3';
 import { FlyControls } from './vendor/three/FlyControls.js';
@@ -124,10 +124,10 @@ dofEnabled.addEventListener('change',()=>{
   document.querySelector('#dof-options').hidden=!dofEnabled.checked;
   viewer?.forceRenderNextFrame();
 });
-for(const control of [dofAperture,dofBlur,dofBokeh])control.addEventListener('input',()=>{
+for(const control of [dofAperture,dofBlur,dofBokeh])control.addEventListener('input',event=>{
   document.querySelector(`output[for="${control.id}"]`).value=control.value;
   activeLens={...activeLens,aperture:Number(dofAperture.value)/100,strength:Number(dofBlur.value)/100,bokeh:Number(dofBokeh.value)/100};
-  lensPreset.value='custom';
+  if(event.isTrusted)lensPreset.value='custom';
   viewer?.forceRenderNextFrame();
 });
 autoOrbit.addEventListener('change',()=>{
@@ -535,12 +535,13 @@ function tick(now) {
       const useDof=dofEnabled.checked && mode!=='splat';
       const focus=focusView.copy(cursor.root.position).applyMatrix4(camera.matrixWorldInverse);
       const focusDepth=Math.max(camera.near,-focus.z);
-      const focusStyle={enabled:useDof,depth:focusDepth,aperture:Number(dofAperture.value)/100,strength:Number(dofBlur.value)/100,bokeh:Number(dofBokeh.value)/100,farBias:activeLens.farBias};
+      const focusStyle={enabled:useDof,depth:focusDepth,aperture:Number(dofAperture.value)/100,strength:Number(dofBlur.value)/100,bokeh:Number(dofBokeh.value)/100,nearBias:activeLens.nearBias,farBias:activeLens.farBias};
       const splatUniforms=viewer.splatMesh.material.uniforms;
       splatUniforms.focusEnabled.value=useDof?1:0;
       splatUniforms.focusDepth.value=focusDepth;
       splatUniforms.focusAperture.value=focusStyle.aperture;
       splatUniforms.focusStrength.value=focusStyle.strength;
+      splatUniforms.focusNearBias.value=focusStyle.nearBias;
       splatUniforms.focusFarBias.value=focusStyle.farBias;
       splatUniforms.focusBokeh.value=focusStyle.bokeh;
       if(mode==='lines')renderer.clear();else viewer.render();

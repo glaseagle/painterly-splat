@@ -25,5 +25,12 @@ test('focus falloff rejects missing depth and approaches its background limit gr
 test('lens presets progress from restrained environmental depth to bright dream bokeh',()=>{
   assert.ok(lensPresets.environmental.aperture<lensPresets.portrait.aperture);
   assert.ok(lensPresets.portrait.farBias>lensPresets.classic.farBias);
+  assert.ok(lensPresets.portrait.nearBias<lensPresets.environmental.nearBias);
   assert.ok(lensPresets.dream.bokeh>lensPresets.telephoto.bokeh);
+});
+test('portrait bias protects near silhouettes while blooming deep background',()=>{
+  const lens=lensPresets.portrait;
+  const near=focusStrokeStyle(1.5,3,lens.aperture,lens.strength,lens.farBias,lens.nearBias);
+  const far=focusStrokeStyle(30,3,lens.aperture,lens.strength,lens.farBias,lens.nearBias);
+  assert.ok(near.size<far.size);assert.ok(near.opacity<far.opacity);
 });

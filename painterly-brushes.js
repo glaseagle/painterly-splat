@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { brushFamilies, brushMatchGLSL, BRUSH_VARIANTS, strokeSizingGLSL } from './painterly-brush-matching.js?v=brushes-2';
-import { focusFalloffGLSL } from './painterly-dof.js?v=lenses-1';
+import { focusFalloffGLSL } from './painterly-dof.js?v=lenses-2';
 
 const VARIANTS = BRUSH_VARIANTS, TILE = 128;
 let atlasPromise;
@@ -106,10 +106,11 @@ export function installBrushMaterial(viewer, texture, mode, size) {
   material.uniforms.focusDepth = { value: 1 };
   material.uniforms.focusAperture = { value: .55 };
   material.uniforms.focusStrength = { value: .6 };
+  material.uniforms.focusNearBias = { value: .45 };
   material.uniforms.focusFarBias = { value: 1.5 };
   material.uniforms.focusBokeh = { value: .5 };
   material.uniforms.brushEnabled = { value: brushFamilies.map(() => 1) };
-  const declarations = 'uniform float brushMix;\nuniform float markSize;\nuniform float sizeVariation;\nuniform float strokeDensity;\nuniform float focusEnabled;\nuniform float focusDepth;\nuniform float focusAperture;\nuniform float focusStrength;\nuniform float focusFarBias;\nuniform float focusBokeh;\nvarying vec4 vBrush;\nvarying float vBrushStrength;\nvarying float vFocusFalloff;\nvarying float vFocusBackground;\nvarying float vBrushLuma;\n';
+  const declarations = 'uniform float brushMix;\nuniform float markSize;\nuniform float sizeVariation;\nuniform float strokeDensity;\nuniform float focusEnabled;\nuniform float focusDepth;\nuniform float focusAperture;\nuniform float focusStrength;\nuniform float focusNearBias;\nuniform float focusFarBias;\nuniform float focusBokeh;\nvarying vec4 vBrush;\nvarying float vBrushStrength;\nvarying float vFocusFalloff;\nvarying float vFocusBackground;\nvarying float vBrushLuma;\n';
   material.vertexShader = declarations + focusFalloffGLSL + '\n' + brushMatchGLSL() + strokeSizingGLSL + '\n' + material.vertexShader.replace(basisLine, `
     float major = length(basisVector1);
     float minor = length(basisVector2);
@@ -129,10 +130,14 @@ export function installBrushMaterial(viewer, texture, mode, size) {
     float viewDepth = max(0.0, -viewCenter.z);
     vFocusBackground = step(focusDepth, viewDepth);
     vBrushLuma = luma;
-    float sideGain = mix(1.0, focusFarBias, vFocusBackground);
+    float sideGain = mix(focusNearBias, focusFarBias, vFocusBackground);
     vFocusFalloff = focusEnabled * painterlyFocusFalloff(viewDepth, focusDepth, focusAperture) * sideGain;
     float focusScale = 1.0 + vFocusFalloff * focusStrength * 1.4;
     float strokeMajor = sized.x * focusScale, strokeMinor = sized.y * focusScale;
+    float bokehShape = clamp(focusBokeh * vFocusBackground * vFocusFalloff * smoothstep(0.5, 0.9, luma) * (0.25 + 0.75 * smoothstep(0.68, 0.94, seed)), 0.0, 1.0);
+    float bokehRadius = max(strokeMajor, strokeMinor) * 0.72;
+    strokeMajor = mix(strokeMajor, bokehRadius, bokehShape);
+    strokeMinor = mix(strokeMinor, bokehRadius, bokehShape);
     // Enlarge a stable, area-weighted set of marks so individual strokes read at
     // screen scale. Other Gaussians remain as a translucent watercolor ground.
     float fade = max(0.002, keep * 0.18);

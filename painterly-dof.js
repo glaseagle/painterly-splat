@@ -1,9 +1,9 @@
 export const lensPresets = Object.freeze({
-  environmental: Object.freeze({ label: '35mm · f/4', aperture: .28, strength: .32, bokeh: .08, farBias: 1 }),
-  classic: Object.freeze({ label: '50mm · f/2', aperture: .52, strength: .46, bokeh: .24, farBias: 1.15 }),
-  portrait: Object.freeze({ label: '85mm · f/1.4', aperture: .76, strength: .62, bokeh: .58, farBias: 1.55 }),
-  telephoto: Object.freeze({ label: '135mm · f/2', aperture: .68, strength: .72, bokeh: .42, farBias: 1.85 }),
-  dream: Object.freeze({ label: '58mm · f/1.2', aperture: .9, strength: .82, bokeh: .92, farBias: 1.75 }),
+  environmental: Object.freeze({ label: '35mm · f/4', aperture: .28, strength: .32, bokeh: .08, nearBias: .8, farBias: 1 }),
+  classic: Object.freeze({ label: '50mm · f/2', aperture: .52, strength: .46, bokeh: .24, nearBias: .65, farBias: 1.15 }),
+  portrait: Object.freeze({ label: '85mm · f/1.4', aperture: .76, strength: .62, bokeh: .58, nearBias: .45, farBias: 1.55 }),
+  telephoto: Object.freeze({ label: '135mm · f/2', aperture: .68, strength: .72, bokeh: .42, nearBias: .4, farBias: 1.85 }),
+  dream: Object.freeze({ label: '58mm · f/1.2', aperture: .9, strength: .82, bokeh: .92, nearBias: .55, farBias: 1.75 }),
 });
 
 // Thin-lens circle of confusion with the constant optical factors removed.
@@ -24,10 +24,10 @@ export function focusFalloff(depth, focusDepth, aperture) {
   return Math.min(1, 1 - Math.exp(-opticalDistance * gain));
 }
 
-export function focusStrokeStyle(depth, focusDepth, aperture, strength, farBias = 1) {
+export function focusStrokeStyle(depth, focusDepth, aperture, strength, farBias = 1, nearBias = 1) {
   const falloff = focusFalloff(depth, focusDepth, aperture);
   const amount = Math.min(1, Math.max(0, strength));
-  const sideGain = depth > focusDepth ? Math.max(1, farBias) : 1;
+  const sideGain = depth > focusDepth ? Math.max(1, farBias) : Math.min(1, Math.max(0, nearBias));
   const response = falloff * sideGain;
   return {
     falloff,
