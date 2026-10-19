@@ -3,7 +3,43 @@ const scalarTypes = {
   int: [4, 'getInt32'], uint: [4, 'getUint32'], float: [4, 'getFloat32'], double: [8, 'getFloat64'],
 };
 const required = ['x','y','z','f_dc_0','f_dc_1','f_dc_2','opacity','scale_0','scale_1','scale_2','rot_0','rot_1','rot_2','rot_3'];
-export const MAX_LOCAL_BYTES = 256 * 1024 * 1024;
+const MIB = 1024 * 1024;
+export const MAX_LOCAL_BYTES = 1536 * MIB;
+
+export function localUploadLimit({ deviceMemory, jsHeapSizeLimit, mobile = false } = {}) {
+  const ram = Number(deviceMemory);
+  let limit;
+  if (mobile) {
+    limit = ram >= 8 ? 768 * MIB : ram >= 4 ? 512 * MIB : 256 * MIB;
+  } else {
+    // deviceMemory is deliberately coarse and capped at 8 GB. An absent value is
+    // common in Firefox and Safari, so use the modern-desktop tier there.
+    limit = !Number.isFinite(ram) || ram <= 0 || ram >= 8 ? MAX_LOCAL_BYTES
+      : ram >= 4 ? 768 * MIB : 384 * MIB;
+  }
+  const heap = Number(jsHeapSizeLimit);
+  if (Number.isFinite(heap) && heap > 0) {
+    // Loading needs the source ArrayBuffer plus a decoded splat buffer. Keep a
+    // large-file allocation below most of the browser's reported JS heap.
+    const heapLimit = Math.max(192 * MIB, Math.floor(heap * .6 / (64 * MIB)) * 64 * MIB);
+    limit = Math.min(limit, heapLimit);
+  }
+  return limit;
+}
+
+export function browserUploadLimit(nav = globalThis.navigator, perf = globalThis.performance) {
+  const userAgent = nav?.userAgent || '';
+  const mobile = nav?.userAgentData?.mobile ?? /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
+  return localUploadLimit({
+    deviceMemory: nav?.deviceMemory,
+    jsHeapSizeLimit: perf?.memory?.jsHeapSizeLimit,
+    mobile,
+  });
+}
+
+export function formatFileSize(bytes) {
+  return bytes >= 1024 * MIB ? `${(bytes / (1024 * MIB)).toFixed(1)} GB` : `${Math.round(bytes / MIB)} MB`;
+}
 
 export function parsePlyHeader(bytes) {
   // One character per byte preserves offsets even for comments with non-ASCII bytes.
@@ -59,11 +95,13 @@ export function cameraFromPlyMetadata(metadata) {
   return { width, height, fx, fy, rotation, position };
 }
 
-export async function prepareLocalSplat(file) {
+export async function prepareLocalSplat(file, maxBytes = browserUploadLimit()) {
   if (!file.size) throw new Error('This file is empty.');
-  if (file.size > MAX_LOCAL_BYTES) throw new Error('Choose a splat under 256 MB for this browser viewer.');
   const extension = file.name.split('.').pop().toLowerCase();
   if (!['ply','splat','ksplat'].includes(extension)) throw new Error('Choose a .ply, .splat or .ksplat file.');
+  if (file.size > maxBytes) {
+    throw new Error(`This device's safe preview limit is ${formatFileSize(maxBytes)}. Try a .ksplat or a computer with more memory.`);
+  }
   if (extension === 'splat') {
     if (file.size % 32 !== 0) throw new Error('Invalid .splat file: incomplete Gaussian records.');
     return { blob: file, extension, camera: null };

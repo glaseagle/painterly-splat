@@ -4,7 +4,7 @@ import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v
 import { createLineArt } from './painterly-lineart.js?v=tools-1';
 import { createOrbitCamera, createCursor } from './painterly-navigation.js?v=lineart-1';
 import { lensPresets } from './painterly-dof.js?v=lenses-2';
-import { prepareLocalSplat, normalizeImport, framedImportCamera } from './painterly-upload.js?v=fit-3';
+import { prepareLocalSplat, normalizeImport, framedImportCamera } from './painterly-upload.js?v=memory-1';
 import { installCamera } from './painterly-camera.js?v=local-3';
 import { FlyControls } from './vendor/three/FlyControls.js';
 import { createTouchControls } from './painterly-touch.js?v=upload-1';
@@ -416,9 +416,8 @@ async function openLocalFile(file, generated = false) {
   uploadStatus.textContent = `Checking ${file.name}…`;
   try {
     const prepared = await prepareLocalSplat(file);
-    const data = await prepared.blob.arrayBuffer();
-    const loader = { ply: PlyLoader, splat: SplatLoader, ksplat: KSplatLoader }[prepared.extension];
-    const buffer = await loader.loadFromFileData(data, 1, 0, false, 0);
+    uploadStatus.textContent = `Loading ${file.name}…`;
+    const buffer = await decodeLocalSplat(prepared);
     const points = [], radii = [], point = new THREE.Vector3(), color = new THREE.Vector4();
     const gaussianScale = new THREE.Vector3(), gaussianRotation = new THREE.Quaternion();
     const total = buffer.getSplatCount(), stride = Math.max(1, Math.floor(total/8192));
@@ -444,6 +443,15 @@ async function openLocalFile(file, generated = false) {
     openSplat.disabled = false;
     sceneButtons.forEach(b => { b.disabled = false; });
   }
+}
+
+// Keep the source ArrayBuffer in a short-lived function frame. PLY and .splat
+// decoders create their own render buffer, so the multi-gigabyte source can be
+// reclaimed before the viewer allocates its GPU textures and sorting data.
+async function decodeLocalSplat(prepared) {
+  const data = await prepared.blob.arrayBuffer();
+  const loader = { ply: PlyLoader, splat: SplatLoader, ksplat: KSplatLoader }[prepared.extension];
+  return loader.loadFromFileData(data, 1, 0, false, 0);
 }
 document.querySelector('#flip-upright').addEventListener('click', () => {
   if (!ready || !scene.local) return;

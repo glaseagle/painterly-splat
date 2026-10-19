@@ -28,7 +28,7 @@ depth, and converts the paths into 3D brush-textured strokes. **Edge detail** ad
 detection sensitivity; **Line width** adjusts ink width. **Lines** isolates the
 linework on paper. Set Line art to 0 to see the brush rendering without outlines.
 
-**Open splat file** loads your own `.ply`, `.splat`, or `.ksplat` (up to 256 MB).
+**Open splat file** loads your own `.ply`, `.splat`, or `.ksplat`. The viewer chooses a safe limit from the device and browser memory budget: up to 1.5 GB on capable desktops, with lower limits on mobile and low-memory devices.
 Files stay in the browser and are never uploaded to a server. The bundled scenes
 remain available. Standard binary little-endian Gaussian PLYs are supported;
 ordinary mesh/point-cloud PLYs and compressed PlayCanvas PLYs are not. Files without

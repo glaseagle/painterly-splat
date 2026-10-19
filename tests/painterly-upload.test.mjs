@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { prepareLocalSplat, parsePlyHeader, cameraFromPlyMetadata, fittedCamera, normalizeImport, MAX_LOCAL_BYTES } from '../painterly-upload.js';
+import { prepareLocalSplat, parsePlyHeader, cameraFromPlyMetadata, fittedCamera, normalizeImport, MAX_LOCAL_BYTES, localUploadLimit, formatFileSize } from '../painterly-upload.js';
 import { sharpFixture } from './upload-fixtures.mjs';
 
 test('SHARP metadata restores its camera and leaves every Gaussian byte intact', async () => {
@@ -26,10 +26,18 @@ test('CRLF and uppercase extensions normalize correctly without metadata', async
 
 test('empty, oversized, unsupported and truncated files are rejected before loading', async () => {
   await assert.rejects(prepareLocalSplat(new File([], 'empty.ply')), /empty/);
-  await assert.rejects(prepareLocalSplat({size:MAX_LOCAL_BYTES+1,name:'big.ply'}), /256 MB/);
+  await assert.rejects(prepareLocalSplat({size:MAX_LOCAL_BYTES+1,name:'big.ply'}, MAX_LOCAL_BYTES), /1.5 GB/);
   await assert.rejects(prepareLocalSplat(new File(['hello'], 'photo.jpg')), /Choose a/);
   await assert.rejects(prepareLocalSplat(new File([new Uint8Array(33)], 'bad.splat')), /incomplete/);
   await assert.rejects(prepareLocalSplat(new File([sharpFixture().slice(0,-4)], 'bad.ply')), /truncated/);
+});
+
+test('local upload limit follows desktop, mobile and browser heap capacity', () => {
+  assert.equal(localUploadLimit({deviceMemory:8}), 1536 * 1024 * 1024);
+  assert.equal(localUploadLimit({deviceMemory:4}), 768 * 1024 * 1024);
+  assert.equal(localUploadLimit({deviceMemory:8,mobile:true}), 768 * 1024 * 1024);
+  assert.equal(localUploadLimit({deviceMemory:8,jsHeapSizeLimit:1024*1024*1024}), 576 * 1024 * 1024);
+  assert.equal(formatFileSize(MAX_LOCAL_BYTES), '1.5 GB');
 });
 
 test('plain PLY meshes cannot masquerade as Gaussian splats', async () => {
