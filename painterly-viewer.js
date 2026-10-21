@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { brushFamilies, DEFAULT_ENABLED_BRUSHES } from './painterly-brush-matching.js?v=tools-1';
-import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=tools-1';
-import { createLineArt } from './painterly-lineart.js?v=tools-1';
+import { createBrushAtlas, installBrushMaterial } from './painterly-brushes.js?v=color-1';
+import { createLineArt } from './painterly-lineart.js?v=color-1';
 import { createOrbitCamera, createCursor } from './painterly-navigation.js?v=lineart-1';
 import { lensPresets } from './painterly-dof.js?v=lenses-2';
 import { prepareLocalSplat, normalizeImport, framedImportCamera } from './painterly-upload.js?v=memory-1';
 import { installCamera } from './painterly-camera.js?v=local-3';
 import { FlyControls } from './vendor/three/FlyControls.js';
 import { createTouchControls } from './painterly-touch.js?v=upload-1';
+import { COLOR_PRESETS, colorStyle } from './painterly-color.js?v=color-1';
 import { Viewer, RenderMode, SceneRevealMode, PlyLoader, SplatLoader, KSplatLoader } from './vendor/gaussian-splats-3d/gaussian-splats-3d.module.js';
 
 const wrap = document.querySelector('#canvas-wrap');
@@ -30,6 +31,13 @@ const dofBokeh = document.querySelector('#dof-bokeh');
 const lensPreset = document.querySelector('#lens-preset');
 const variation = document.querySelector('#variation');
 const strokeDensity = document.querySelector('#stroke-density');
+const baseOpacity = document.querySelector('#base-opacity');
+const paintOpacity = document.querySelector('#paint-opacity');
+const colorPreset = document.querySelector('#color-preset');
+const colorExposure = document.querySelector('#color-exposure');
+const colorContrast = document.querySelector('#color-contrast');
+const colorSaturation = document.querySelector('#color-saturation');
+const colorWarmth = document.querySelector('#color-warmth');
 const brushSet = document.querySelector('#brush-set');
 const enabledBrushes = [...DEFAULT_ENABLED_BRUSHES];
 function updateBrushSelection() {
@@ -66,7 +74,42 @@ let navMode = 'orbit', placingCursor = false, pivotPending = true;
 let viewDirty = true, lineDirty = true, lastNavigation = 0, lastLineBuild = 0, lineRevision = 0;
 const viewParams = new URLSearchParams(location.search);
 let activeLens = lensPresets.portrait;
+let activeColorStyle = colorStyle();
 let pendingOrbitAngle = Number(viewParams.get('angle')) || 0;
+
+function applyVisualStyle() {
+  activeColorStyle=colorStyle({exposure:colorExposure.value,contrast:colorContrast.value,saturation:colorSaturation.value,warmth:colorWarmth.value});
+  const uniforms=viewer?.splatMesh?.material?.uniforms;
+  if(uniforms?.baseOpacity){
+    uniforms.baseOpacity.value=Number(baseOpacity.value)/100;
+    uniforms.paintOpacity.value=Number(paintOpacity.value)/100;
+    uniforms.colorExposure.value=activeColorStyle.exposure;
+    uniforms.colorContrast.value=activeColorStyle.contrast;
+    uniforms.colorSaturation.value=activeColorStyle.saturation;
+    uniforms.colorWarmth.value=activeColorStyle.warmth;
+  }
+  wrap.dataset.baseOpacity=baseOpacity.value;wrap.dataset.paintOpacity=paintOpacity.value;
+  wrap.dataset.lineOpacity=lineAmount.value;wrap.dataset.colorPreset=colorPreset.value;
+  viewer?.forceRenderNextFrame();
+}
+
+function applyColorPreset(name) {
+  const preset=COLOR_PRESETS[name]||COLOR_PRESETS.original;
+  colorPreset.value=COLOR_PRESETS[name]?name:'original';
+  for(const [control,key] of [[colorExposure,'exposure'],[colorContrast,'contrast'],[colorSaturation,'saturation'],[colorWarmth,'warmth']]){
+    control.value=String(preset[key]);document.querySelector(`output[for="${control.id}"]`).value=control.value;
+  }
+  applyVisualStyle();
+}
+colorPreset.addEventListener('change',()=>applyColorPreset(colorPreset.value));
+for(const control of [colorExposure,colorContrast,colorSaturation,colorWarmth])control.addEventListener('input',event=>{
+  document.querySelector(`output[for="${control.id}"]`).value=control.value;
+  if(event.isTrusted)colorPreset.value='custom';
+  applyVisualStyle();
+});
+for(const control of [baseOpacity,paintOpacity])control.addEventListener('input',()=>{
+  document.querySelector(`output[for="${control.id}"]`).value=control.value;applyVisualStyle();
+});
 
 function applyLensPreset(name) {
   const profile=lensPresets[name] || lensPresets.portrait;
@@ -297,6 +340,7 @@ async function loadScene(id, local = null) {
     installBrushMaterial(viewer, brushTexture, mode, Number(density.value) / 100);
     viewer.splatMesh.material.uniforms.sizeVariation.value = Number(variation.value)/100;
     viewer.splatMesh.material.uniforms.strokeDensity.value = Number(strokeDensity.value)/100;
+    applyVisualStyle();
     ready = true;configureNavigation();
     updateBrushSelection();
     sceneButtons.forEach(b => {
@@ -356,11 +400,14 @@ async function setMode(next) {
     b.classList.toggle('is-active', active); b.setAttribute('aria-pressed', String(active));
   });
   density.disabled = variation.disabled = strokeDensity.disabled = mode === 'splat' || mode === 'lines';
+  baseOpacity.disabled = mode === 'brush' || mode === 'lines';
+  paintOpacity.disabled = mode === 'splat' || mode === 'lines';
   lineAmount.disabled = edgeDetail.disabled = lineWidth.disabled = mode === 'splat';
   if (viewer?.splatMesh?.material?.uniforms.brushMix) {
     viewer.splatMesh.material.uniforms.brushMix.value = mode === 'brush' ? 1 : mode === 'hybrid' ? .65 : 0;
     viewer.splatMesh.material.uniforms.pigmentMap.value = brushTexture;
   }
+  applyVisualStyle();
   updateViewNote();
   changed();
 }
@@ -495,7 +542,8 @@ for (const [control, uniform] of [[variation, 'sizeVariation'], [strokeDensity, 
 }
 for(const control of [lineAmount,edgeDetail,lineWidth])control.addEventListener('input',()=>{
   document.querySelector(`output[for="${control.id}"]`).value=control.value;
-  if(control===edgeDetail||control===lineAmount)lineDirty=true;
+  if(control===edgeDetail)lineDirty=true;
+  if(control===lineAmount)applyVisualStyle();
   viewer?.forceRenderNextFrame();
 });
 mobile.addEventListener('change', () => setMenu(false));
@@ -555,7 +603,7 @@ function tick(now) {
       splatUniforms.focusFarBias.value=focusStyle.farBias;
       splatUniforms.focusBokeh.value=focusStyle.bokeh;
       if(mode==='lines')renderer.clear();else viewer.render();
-      if(mode!=='splat')lineArt.render(camera,Number(lineAmount.value)/100,.5+Number(lineWidth.value)*.045,focusStyle);
+      if(mode!=='splat')lineArt.render(camera,Number(lineAmount.value)/100,.5+Number(lineWidth.value)*.045,focusStyle,activeColorStyle);
       wrap.dataset.dofFocus=focusDepth.toFixed(5);
       wrap.dataset.dofEnabled=String(useDof);
       cursor.root.visible=document.querySelector('#show-cursor').checked;

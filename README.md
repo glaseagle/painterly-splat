@@ -2,10 +2,13 @@
 
 Real Gaussian scans rendered as view-dependent p5.brush strokes.
 
-**[Open the live demo](https://michael.software/painterly-splat?v=focus-1)**
+**[Open the live demo](https://michael.software/painterly-splat?v=color-1)**
 
 The train opens in Brush mode. Compare Splats / Hybrid / Brush / Lines, choose
 from 18 brush families, and adjust stroke size, variation, density, and line art.
+Independent Gaussian, brush, and line-art opacity controls make each render mode
+behave like a layer stack. Color correction adds exposure, contrast, saturation,
+warmth, and five starting looks without changing the source splat.
 
 Drag to orbit the visible surface. Double-click a surface, or use **Place 3D cursor**
 and click/tap, to set the orbit pivot. Right-drag pans; wheel/pinch zooms. The cursor

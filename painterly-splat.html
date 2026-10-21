@@ -293,6 +293,14 @@
     .control output { text-align: right; font-variant-numeric: tabular-nums; }
     .control[hidden] { display: none; }
 
+    .tool-group { margin: 10px 0; padding: 9px 0 7px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .tool-group + .tool-group { margin-top: -11px; border-top: 0; }
+    .tool-group summary { margin-bottom: 8px; color: var(--ink); cursor: pointer; font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; }
+    .tool-group summary::marker { color: var(--muted); }
+    .tool-select { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 10px; margin-bottom: 5px; }
+    .tool-select label { color: var(--muted); font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; }
+    .tool-select select { min-width: 0; padding: 6px; color: var(--ink); background: #24231f; border: 1px solid var(--line); font: inherit; font-size: .7rem; }
+
     input[type="range"] {
       width: 100%;
       height: 14px;
@@ -496,6 +504,60 @@
         <button type="button" data-mode="lines" aria-pressed="false">Lines</button>
       </div>
 
+      <details class="tool-group" open>
+        <summary>Layer opacity</summary>
+        <div class="control">
+          <label for="base-opacity">Gaussians</label>
+          <input id="base-opacity" type="range" min="0" max="100" value="100" title="Opacity of the original Gaussian layer in Splats and Hybrid modes." />
+          <output for="base-opacity">100</output>
+        </div>
+        <div class="control">
+          <label for="paint-opacity">Brushes</label>
+          <input id="paint-opacity" type="range" min="0" max="100" value="100" title="Fade the painted brush layer while keeping line art independent." />
+          <output for="paint-opacity">100</output>
+        </div>
+        <div class="control">
+          <label for="line-amount">Line art</label>
+          <input id="line-amount" type="range" min="0" max="100" value="75" title="Opacity of the projected line-art layer. Zero turns line art off." />
+          <output for="line-amount">75</output>
+        </div>
+      </details>
+
+      <details class="tool-group" open>
+        <summary>Color correction</summary>
+        <div class="tool-select">
+          <label for="color-preset">Look</label>
+          <select id="color-preset">
+            <option value="original" selected>Original</option>
+            <option value="warm">Warm film</option>
+            <option value="cool">Cool studio</option>
+            <option value="wash">Muted wash</option>
+            <option value="vivid">Vivid pigment</option>
+            <option value="custom" disabled>Custom</option>
+          </select>
+        </div>
+        <div class="control">
+          <label for="color-exposure">Exposure</label>
+          <input id="color-exposure" type="range" min="-100" max="100" value="0" />
+          <output for="color-exposure">0</output>
+        </div>
+        <div class="control">
+          <label for="color-contrast">Contrast</label>
+          <input id="color-contrast" type="range" min="0" max="200" value="100" />
+          <output for="color-contrast">100</output>
+        </div>
+        <div class="control">
+          <label for="color-saturation">Saturation</label>
+          <input id="color-saturation" type="range" min="0" max="200" value="100" />
+          <output for="color-saturation">100</output>
+        </div>
+        <div class="control">
+          <label for="color-warmth">Warmth</label>
+          <input id="color-warmth" type="range" min="-100" max="100" value="0" />
+          <output for="color-warmth">0</output>
+        </div>
+      </details>
+
       <div class="control">
         <label for="density">Stroke size</label>
         <input id="density" type="range" min="0" max="200" value="100" />
@@ -511,11 +573,6 @@
         <label for="stroke-density">Stroke density</label>
         <input id="stroke-density" type="range" min="25" max="200" value="100" title="How many Gaussians become visible brush marks." />
         <output for="stroke-density">100</output>
-      </div>
-      <div class="control">
-        <label for="line-amount">Line art</label>
-        <input id="line-amount" type="range" min="0" max="100" value="75" title="Brush strokes traced from edges of the unpainted splats. Zero turns line art off." />
-        <output for="line-amount">75</output>
       </div>
       <div class="control">
         <label for="edge-detail">Edge detail</label>
@@ -572,6 +629,6 @@
 
   <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
   <script src="https://cdn.jsdelivr.net/npm/p5.brush@2.2.3/dist/brush.js"></script>
-  <script type="module" src="painterly-viewer.js?v=memory-1"></script>
+  <script type="module" src="painterly-viewer.js?v=color-1"></script>
 </body>
 </html>

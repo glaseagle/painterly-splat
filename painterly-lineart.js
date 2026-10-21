@@ -3,6 +3,7 @@ import { cannyEdges, decodeDepth, traceEdges } from './painterly-edges.js?v=line
 import { unprojectDepth } from './painterly-navigation.js?v=lineart-1';
 import { chooseBrush, brushFamilies, BRUSH_VARIANTS } from './painterly-brush-matching.js?v=tools-1';
 import { focusFalloffGLSL } from './painterly-dof.js?v=lenses-2';
+import { colorGradeGLSL } from './painterly-color.js?v=color-1';
 
 export const packDepthGLSL = `
 vec3 packViewDepth(float depth) {
@@ -37,7 +38,7 @@ export function createLineArt(renderer, mesh, atlas) {
   const layer=new THREE.Scene();
   const material=new THREE.ShaderMaterial({
     transparent:true,depthTest:false,depthWrite:false,toneMapped:false,side:THREE.DoubleSide,
-    uniforms:{atlas:{value:atlas},surfaceDepth:{value:depthTarget.texture},viewport:{value:new THREE.Vector2(1,1)},lineWidth:{value:1.5},amount:{value:.75},focusEnabled:{value:1},focusDepth:{value:1},focusAperture:{value:.55},focusStrength:{value:.6},focusNearBias:{value:.45},focusFarBias:{value:1.5}},
+    uniforms:{atlas:{value:atlas},surfaceDepth:{value:depthTarget.texture},viewport:{value:new THREE.Vector2(1,1)},lineWidth:{value:1.5},amount:{value:.75},focusEnabled:{value:1},focusDepth:{value:1},focusAperture:{value:.55},focusStrength:{value:.6},focusNearBias:{value:.45},focusFarBias:{value:1.5},colorExposure:{value:0},colorContrast:{value:1},colorSaturation:{value:1},colorWarmth:{value:0}},
     vertexShader:`${focusFalloffGLSL}
       attribute vec3 before;attribute vec3 after;attribute vec2 strokeUV;
       attribute vec2 brushTile;attribute vec3 pigment;attribute float pressure;
@@ -57,7 +58,7 @@ export function createLineArt(renderer, mesh, atlas) {
         gl_Position=p;vUV=strokeUV;vTile=brushTile;vPigment=pigment;
         vDepth=strokeDepth;
       }`,
-    fragmentShader:`${packDepthGLSL}
+    fragmentShader:`${packDepthGLSL}\n${colorGradeGLSL}
       uniform sampler2D atlas;uniform sampler2D surfaceDepth;uniform vec2 viewport;uniform float amount;
       uniform float focusStrength;
       varying vec2 vUV;varying vec2 vTile;varying vec3 vPigment;varying float vDepth;varying float vFocusFalloff;
@@ -68,7 +69,7 @@ export function createLineArt(renderer, mesh, atlas) {
         float ink=pow(texture2D(atlas,uv).a,0.55);
         float ends=smoothstep(0.0,0.08,vUV.x)*smoothstep(0.0,0.08,1.0-vUV.x);
         float focusOpacity=1.0+vFocusFalloff*focusStrength*0.75;
-        gl_FragColor=vec4(vPigment,min(1.0,ink*ends*amount*focusOpacity));
+        gl_FragColor=vec4(gradeColor(vPigment),min(1.0,ink*ends*amount*focusOpacity));
       }`,
   });
   const strokes=new THREE.Mesh(new THREE.BufferGeometry(),material);strokes.frustumCulled=false;layer.add(strokes);
@@ -150,7 +151,7 @@ export function createLineArt(renderer, mesh, atlas) {
       }
       return chosen<0?null:unprojectDepth(chosen%width,Math.floor(chosen/width),depths[chosen],width,height,snapshot);
     },
-    render(camera,amount,width,focus={}){
+    render(camera,amount,width,focus={},color={}){
       if(!lineCount||!amount)return;
       material.uniforms.amount.value=amount;material.uniforms.lineWidth.value=width;
       material.uniforms.focusEnabled.value=focus.enabled?1:0;
@@ -159,6 +160,10 @@ export function createLineArt(renderer, mesh, atlas) {
       material.uniforms.focusStrength.value=focus.strength||0;
       material.uniforms.focusNearBias.value=focus.nearBias??1;
       material.uniforms.focusFarBias.value=focus.farBias||1;
+      material.uniforms.colorExposure.value=color.exposure||0;
+      material.uniforms.colorContrast.value=color.contrast??1;
+      material.uniforms.colorSaturation.value=color.saturation??1;
+      material.uniforms.colorWarmth.value=color.warmth||0;
       const auto=renderer.autoClear;renderer.autoClear=false;renderer.render(layer,camera);renderer.autoClear=auto;
     },
     dispose(){strokes.geometry.dispose();material.dispose();base.dispose();depth.dispose();colorTarget.dispose();depthTarget.dispose();},

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { brushFamilies, brushMatchGLSL, BRUSH_VARIANTS, strokeSizingGLSL } from './painterly-brush-matching.js?v=tools-1';
 import { focusFalloffGLSL } from './painterly-dof.js?v=lenses-2';
+import { colorGradeGLSL } from './painterly-color.js?v=color-1';
 
 const VARIANTS = BRUSH_VARIANTS, TILE = 128;
 let atlasPromise;
@@ -102,6 +103,12 @@ export function installBrushMaterial(viewer, texture, mode, size) {
   material.uniforms.markSize = { value: size };
   material.uniforms.sizeVariation = { value: .85 };
   material.uniforms.strokeDensity = { value: 1 };
+  material.uniforms.baseOpacity = { value: 1 };
+  material.uniforms.paintOpacity = { value: 1 };
+  material.uniforms.colorExposure = { value: 0 };
+  material.uniforms.colorContrast = { value: 1 };
+  material.uniforms.colorSaturation = { value: 1 };
+  material.uniforms.colorWarmth = { value: 0 };
   material.uniforms.focusEnabled = { value: 1 };
   material.uniforms.focusDepth = { value: 1 };
   material.uniforms.focusAperture = { value: .55 };
@@ -110,7 +117,7 @@ export function installBrushMaterial(viewer, texture, mode, size) {
   material.uniforms.focusFarBias = { value: 1.5 };
   material.uniforms.focusBokeh = { value: .5 };
   material.uniforms.brushEnabled = { value: brushFamilies.map(() => 1) };
-  const declarations = 'uniform float brushMix;\nuniform float markSize;\nuniform float sizeVariation;\nuniform float strokeDensity;\nuniform float focusEnabled;\nuniform float focusDepth;\nuniform float focusAperture;\nuniform float focusStrength;\nuniform float focusNearBias;\nuniform float focusFarBias;\nuniform float focusBokeh;\nvarying vec4 vBrush;\nvarying float vBrushStrength;\nvarying float vFocusFalloff;\nvarying float vFocusBackground;\nvarying float vBrushLuma;\n';
+  const declarations = 'uniform float brushMix;\nuniform float markSize;\nuniform float sizeVariation;\nuniform float strokeDensity;\nuniform float focusEnabled;\nuniform float focusDepth;\nuniform float focusAperture;\nuniform float focusStrength;\nuniform float focusNearBias;\nuniform float focusFarBias;\nuniform float focusBokeh;\nuniform float baseOpacity;\nuniform float paintOpacity;\nvarying vec4 vBrush;\nvarying float vBrushStrength;\nvarying float vFocusFalloff;\nvarying float vFocusBackground;\nvarying float vBrushLuma;\n';
   material.vertexShader = declarations + focusFalloffGLSL + '\n' + brushMatchGLSL() + strokeSizingGLSL + '\n' + material.vertexShader.replace(basisLine, `
     float major = length(basisVector1);
     float minor = length(basisVector2);
@@ -148,11 +155,11 @@ export function installBrushMaterial(viewer, texture, mode, size) {
     basisVector2 = mix(basisVector2, vec2(direction.y, -direction.x) * strokeMinor, enlarge);
     vBrush = vec4(family, variant, selected, seed);
     vec2 ndcOffset = vec2(vPosition.x * basisVector1 + vPosition.y * basisVector2) *`);
-  material.fragmentShader = declarations + 'uniform sampler2D pigmentMap;\n' + material.fragmentShader
+  material.fragmentShader = declarations + 'uniform sampler2D pigmentMap;\n' + colorGradeGLSL + '\n' + material.fragmentShader
     .replace('if (A > 8.0) discard;', 'if (A > 8.0 && brushMix < 0.01) discard;')
     .replace(alphaLine, `
       float gaussian = exp(-0.5 * A);
-      float opacity = gaussian * vColor.a;
+      float opacity = gaussian * vColor.a * baseOpacity;
       if (brushMix > 0.0) {
         vec2 uv = clamp(vPosition / 5.656854 + 0.5, 0.002, 0.998);
         vec2 atlasUV = (vec2(vBrush.y, vBrush.x) + uv) / vec2(${VARIANTS.toFixed(1)}, ${brushFamilies.length.toFixed(1)});
@@ -173,13 +180,16 @@ export function installBrushMaterial(viewer, texture, mode, size) {
         float bokehMix = clamp(focusBokeh * vFocusBackground * vFocusFalloff * highlight * (0.3 + 0.7 * sparse), 0.0, 1.0);
         float bokehAlpha = (disc * 0.30 + rim * (0.34 + highlight * 0.38)) * vColor.a;
         painted = mix(painted, max(painted, bokehAlpha), bokehMix);
-        opacity = mix(opacity, painted, brushMix);
+        float baseLayer = gaussian * vColor.a * (1.0 - brushMix) * baseOpacity;
+        float paintLayer = painted * brushMix * paintOpacity;
+        opacity = min(1.0, baseLayer + paintLayer);
         vec3 paper = vec3(0.95, 0.92, 0.85);
         vec3 paint = floor(color * 22.0 + 0.5) / 22.0;
         paint = mix(paint, paper, mix(0.22, 0.06, vBrush.z));
         paint = mix(paint, mix(paint, vec3(1.0), 0.22), bokehMix * 0.7);
-        color = mix(color, paint, brushMix);
+        color = (color * baseLayer + paint * paintLayer) / max(0.00001, baseLayer + paintLayer);
       }
+      color = gradeColor(color);
     `);
   material.needsUpdate = true;
 }
